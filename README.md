@@ -122,7 +122,7 @@ Safari users do not have the same redirector ecosystem that Chromium and Firefox
 
 Freedirect is made by me, [0xCUB3](https://github.com/0xCUB3).
 
-Big thanks to [LibRedirect](https://github.com/libredirect/browser_extension). Freedirect is not a copy of LibRedirect, but it is very clearly inspired by it: the service coverage, frontend choices, and general “send this site somewhere better” idea come from that ecosystem. If you use Firefox or Chromium, LibRedirect is still the project you should probably try first.
+Big thanks to [LibRedirect](https://github.com/libredirect/browser_extension) for inspiring this project. The “send this site somewhere better” idea come from that ecosystem. If you use Firefox or Chromium, LibRedirect is still the project you should probably try first.
 
 <br>
 
@@ -131,11 +131,3 @@ Big thanks to [LibRedirect](https://github.com/libredirect/browser_extension). F
 <br>
 
 <div align="center">
-
-## License
-
-</div>
-
-Freedirect is licensed under the [GNU General Public License v3.0](LICENSE).
-
-That matches LibRedirect and keeps the same basic spirit: you can study it, change it, share it, and ship your changes, as long as the same freedoms stay attached.
