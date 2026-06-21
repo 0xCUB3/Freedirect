@@ -1,81 +1,58 @@
+<div align="center">
+
+<img src="media/freedirect_logo.png" alt="Freedirect logo" width="120">
+
 # Freedirect
 
-Safari Web Extension + minimal native container for redirecting service URLs to alternative frontends on Apple platforms.
+**A Safari redirector for privacy-friendly frontends.**
 
-## Targets
+![Platform](https://img.shields.io/badge/macOS_26+_|_iOS_26+_|_iPadOS_26+-gray?style=flat&logo=apple&logoColor=white)
+![Safari](https://img.shields.io/badge/Safari-Web_Extension-gray?style=flat&logo=safari&logoColor=white)
+![License](https://img.shields.io/badge/GPL--3.0-gray?style=flat&label=license)
 
-- macOS 26+
-- iOS 26+
-- iPadOS 26+
-- Safari Web Extension, Manifest V3
-- Native app is only a Safari extension container/setup shell
+<img src="media/options.png" alt="Freedirect settings" width="900">
 
-## Architecture
+</div>
 
-- `Shared (Extension)/Resources/manifest.json` — MV3 extension manifest
-- `Shared (Extension)/Resources/background.js` — service catalog, state migration, DNR rule generation, navigation fallbacks, context menus, commands
-- `Shared (Extension)/Resources/content-script.js` — `document_start` fallback redirect path
-- `Shared (Extension)/Resources/options.html` / `options.js` — extension-owned settings UI
-- `Shared (Extension)/Resources/popup.html` / `popup.js` — toolbar popup
-- `Shared (Extension)/Resources/static_rules.json` — static DNR bootstrap rules for high-impact services
-- `Shared (Extension)/Resources/instances.json` — bundled public instance snapshot
-- `Shared (App)/ViewController.swift` — minimal companion WebView setup screen
+Freedirect redirects links from large platforms to alternative frontends in Safari. Think YouTube to Invidious or FreeTube, Reddit to Redlib, X/Twitter to Nitter-style instances, Medium to Scribe, Wikipedia to Wikiless, and similar redirects.
 
-Settings are stored in `browser.storage.local` under `freedirectState`. The native app does not mirror or own redirect settings.
+The native app is intentionally minimal. Redirect settings live in the Safari extension UI, not in a duplicated native settings screen.
 
-## Redirect pipeline
+## What it does
 
-1. Static DNR rules cover selected high-impact defaults before dynamic state is loaded.
-2. Dynamic DNR rules are generated from the configured service catalog.
-3. `webNavigation.onBeforeNavigate` and `tabs.onUpdated` handle app-protocol redirects and Safari race cases.
-4. `webNavigation.onErrorOccurred` retries redirectable failed main-frame navigations, useful when DNS blocking wins before Safari finishes extension handling.
-5. `content-script.js` provides a last-resort `document_start` redirect path when a page can load.
+- Redirects supported service URLs to privacy-friendlier frontends.
+- Uses Safari Declarative Net Request where possible.
+- Falls back to early navigation handling for Safari edge cases, including DNS-blocked original domains.
+- Supports custom instances, pinned instances, rotating instances, health checks, and JSON backup/import.
+- Supports FreeTube app redirects through `freetube://`.
 
-App-protocol frontends such as FreeTube use `freetube://` and are intentionally excluded from DNR generation.
+## Install
 
-## Build
-
-```sh
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer ./scripts/verify.sh --build
-```
-
-Local Safari extension registration check:
-
-```sh
-./scripts/check-safari-extension-install.sh --open
-```
-
-Unsigned builds are not the intended path. Use Apple Development signing for local Safari testing.
-
-## DMG
-
-Manual DMG build:
-
-```sh
-VERSION=0.1.0 scripts/build-dmg.sh
-```
-
-The script builds the macOS target, optionally signs with `SIGNING_IDENTITY`, and writes:
-
-```text
-build/homebrew/Freedirect-${VERSION}.dmg
-```
-
-## Release state
-
-Current version:
-
-- App/appex marketing version: `0.1.0`
-- App/appex build: `1`
-- Extension manifest version: `0.1.0`
-
-Homebrew tap:
+From Homebrew:
 
 ```sh
 brew tap 0xcub3/freedirect
 brew install --cask freedirect
 ```
 
+Or download the DMG from the latest GitHub release.
+
+## Current state
+
+Freedirect is early software. Public alternative frontends break often, and Safari extension behavior differs across macOS/iOS releases. Some services are intentionally conservative or disabled by default when public frontends are unreliable.
+
+If you use FreeTube, do not DNS-block every YouTube-related domain. FreeTube still needs access to YouTube extractor/media domains even if Safari never opens the YouTube page.
+
+## Development
+
+Technical notes, architecture, build commands, and release details live in [`TECHNICAL.md`](TECHNICAL.md).
+
+## Credits
+
+Made by [0xCUB3](https://github.com/0xCUB3).
+
+Freedirect is inspired by [LibRedirect](https://github.com/libredirect/browser_extension). If you use Firefox or Chromium, LibRedirect is still the project to try first.
+
 ## License
 
-GPL-3.0. See `LICENSE`.
+GPL-3.0. See [`LICENSE`](LICENSE).
