@@ -1,0 +1,1296 @@
+'use strict'
+
+const api = globalThis.chrome ?? globalThis.browser
+const RULE_ID_BASE = 1000
+const SESSION_RULE_ID_BASE = 900000
+const STATIC_OVERRIDE_RULE_ID_BASE = 910000
+const MAX_RULES = 5000
+const HEALTH_TIMEOUT_MS = 6000
+const INSTANCE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
+const INSTANCE_SNAPSHOT_PATH = 'instances.json'
+const STATIC_RULESET_ID = 'freedirect_static_defaults'
+const INSTANCE_SOURCES = [
+  'https://raw.githubusercontent.com/libredirect/instances/main/data.json',
+  'https://codeberg.org/LibRedirect/instances/raw/branch/main/data.json'
+]
+const TOOLBAR_ICONS = {
+  active: {
+    16: 'images/toolbar-blue-16.png',
+    32: 'images/toolbar-blue-32.png',
+    48: 'images/toolbar-blue-48.png',
+    128: 'images/toolbar-blue-128.png'
+  },
+  inactive: {
+    16: 'images/toolbar-gray-16.png',
+    32: 'images/toolbar-gray-32.png',
+    48: 'images/toolbar-gray-48.png',
+    128: 'images/toolbar-gray-128.png'
+  }
+}
+let bundledInstancesLoaded = false
+const tabLastGoodUrls = new Map()
+const NATIVE_APP_ID = 'app.freedirect.Freedirect'
+const PROMISE_STYLE_API = Boolean(globalThis.browser) && api === globalThis.browser
+
+function lastRuntimeError() {
+  return api?.runtime?.lastError?.message
+}
+
+function callApi(target, method, ...args) {
+  if (!target?.[method]) return Promise.reject(new Error(`${method} unavailable`))
+  if (PROMISE_STYLE_API) {
+    try {
+      const result = target[method](...args)
+      return result?.then ? result : Promise.resolve(result)
+    } catch (error) {
+      return Promise.reject(error)
+    }
+  }
+  return new Promise((resolve, reject) => {
+    try {
+      target[method](...args, (...values) => {
+        const error = lastRuntimeError()
+        if (error) reject(new Error(error))
+        else resolve(values.length > 1 ? values : values[0])
+      })
+    } catch (error) {
+      reject(error)
+    }
+  })
+}
+
+const PROFILES = {
+  balanced: {
+    name: 'Balanced',
+    description: 'Redirect the highest-impact search, social, and video services while keeping niche services manual.',
+    enabledServices: ['youtube', 'reddit', 'twitter', 'instagram', 'search']
+  },
+  strict: {
+    name: 'Strict',
+    description: 'Enable every implemented redirect template.',
+    enabledServices: 'all'
+  },
+  manual: {
+    name: 'Manual',
+    description: 'Keep current service choices and only change settings explicitly.'
+  }
+}
+
+const SERVICE_CATALOG = {
+  youtube: {
+    name: 'YouTube',
+    confidence: 'high',
+    originalHosts: ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be', 'youtube-nocookie.com', 'www.youtube-nocookie.com'],
+    defaultFrontend: 'invidious',
+    frontends: {
+      invidious: { name: 'Invidious', instances: ['https://inv.thepixora.com', 'https://yt.chocolatemoo53.com', 'https://invidious.tiekoetter.com', 'https://inv.nadeko.net', 'https://invidious.nerdvpn.de', 'https://invidious.f5.si'], rules: [
+        { source: '^https?://(www\\.|m\\.)?youtube\\.com/watch\\?v=([^?&#/]+)(.*)', path: '/watch?v=$2$3&local=false', priority: 20 },
+        { source: '^https?://youtu\\.be/([^?&#/]+)(.*)', path: '/watch?v=$1&local=false', priority: 20 },
+        { source: '^https?://(www\\.|m\\.)?youtube\\.com/(.*)', path: '/$2' },
+        { source: '^https?://(www\\.)?youtube-nocookie\\.com/embed/([^?&#/]+)(.*)', path: '/embed/$2' }
+      ] },
+      piped: { name: 'Piped', instances: ['https://piped.video', 'https://cf.piped.video', 'https://vc.piped.video', 'https://re.piped.video', 'https://fl.piped.video', 'https://do.piped.video', 'https://nf.piped.video', 'https://az.piped.video', 'https://piped.private.coffee', 'https://piped.yt', 'https://piped.drgns.space', 'https://piped.owo.si', 'https://piped.ducks.party', 'https://piped.codespace.cz', 'https://piped.reallyaweso.me', 'https://piped.darkness.services', 'https://piped.orangenet.cc', 'https://piped.leptons.xyz', 'https://piped.nosebs.ru', 'https://piped.privacy.com.de', 'https://piped.adminforge.de', 'https://adminforge.de'] },
+      freetube: { name: 'FreeTube', instances: ['freetube://'], appProtocol: true, rules: [
+        { source: '^https?://(www\\.|m\\.)?youtube\\.com/watch\\?v=([^?&#/]+)(.*)', path: 'https://www.youtube.com/watch?v=$2$3' },
+        { source: '^https?://youtu\\.be/([^?&#/]+)(.*)', path: 'https://youtu.be/$1$2' },
+        { source: '^https?://(www\\.|m\\.)?youtube\\.com/(.*)', path: 'https://www.youtube.com/$2' },
+        { source: '^https?://(www\\.)?youtube-nocookie\\.com/embed/([^?&#/]+)(.*)', path: 'https://www.youtube.com/embed/$2$3' }
+      ] }
+    },
+    rules: [
+      { source: '^https?://(www\\.|m\\.)?youtube\\.com/(.*)', path: '/$2' },
+      { source: '^https?://youtu\\.be/([^?&#/]+)(.*)', path: '/watch?v=$1' },
+      { source: '^https?://(www\\.)?youtube-nocookie\\.com/embed/([^?&#/]+)(.*)', path: '/embed/$2' }
+    ]
+  },
+  reddit: {
+    name: 'Reddit',
+    confidence: 'high',
+    originalHosts: ['reddit.com', 'www.reddit.com', 'old.reddit.com', 'new.reddit.com', 'redd.it'],
+    defaultFrontend: 'redlib',
+    frontends: {
+      redlib: { name: 'Redlib', instances: ['https://redlib.net', 'https://safereddit.com', 'https://libreddit.bus-hit.me'] },
+      libreddit: { name: 'Libreddit', instances: ['https://libreddit.projectsegfau.lt'] }
+    },
+    rules: [
+      { source: '^https?://(www\\.|old\\.|new\\.)?reddit\\.com/(.*)', path: '/$2' },
+      { source: '^https?://redd\\.it/(.*)', path: '/$1' }
+    ]
+  },
+  twitter: {
+    name: 'X / Twitter',
+    confidence: 'high',
+    originalHosts: ['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com', 'mobile.twitter.com'],
+    defaultFrontend: 'nitter',
+    frontends: {
+      nitter: { name: 'Nitter-compatible', instances: ['https://nitter.net', 'https://nitter.poast.org', 'https://xcancel.com'] }
+    },
+    rules: [
+      { source: '^https?://(www\\.|mobile\\.)?(twitter|x)\\.com/(.*)', path: '/$3' }
+    ]
+  },
+  instagram: {
+    name: 'Instagram',
+    confidence: 'high',
+    originalHosts: ['instagram.com', 'www.instagram.com'],
+    defaultFrontend: 'kittygram',
+    frontends: {
+      kittygram: { name: 'kittygram', instances: ['https://kittygr.am', 'https://kittygram.irelephant.net', 'https://kittygram.kareem.one', 'https://kg.meowing.de'] },
+      proxigram: { name: 'Proxigram', instances: ['https://ig.opnxng.com', 'https://proxigram.lunar.icu', 'https://gram.whatever.social', 'https://ig.snine.nl', 'https://proxigram.privacyredirect.com'] }
+    },
+    rules: [{ source: '^https?://(www\\.)?instagram\\.com/(.*)', path: '/$2' }]
+  },
+  tiktok: {
+    name: 'TikTok',
+    confidence: 'high',
+    originalHosts: ['tiktok.com', 'www.tiktok.com', 'vm.tiktok.com'],
+    defaultFrontend: 'proxiTok',
+    frontends: {
+      proxiTok: { name: 'ProxiTok', instances: ['https://proxitok.pabloferreiro.es', 'https://proxitok.pussthecat.org', 'https://tok.habedieeh.re', 'https://proxitok.privacydev.net', 'https://tok.artemislena.eu', 'https://tok.adminforge.de', 'https://cringe.whatever.social', 'https://proxitok.lunar.icu', 'https://proxitok.privacy.com.de', 'https://cringe.seitan-ayoub.lol', 'https://tt.opnxng.com', 'https://tiktok.wpme.pl', 'https://proxitok.r4fo.com', 'https://proxitok.belloworld.it', 'https://proxitok.herokuapp.com'] }
+    },
+    rules: [{ source: '^https?://(www\\.|vm\\.)?tiktok\\.com/(.*)', path: '/$2' }]
+  },
+  search: {
+    name: 'Google Search',
+    confidence: 'high',
+    originalHosts: ['google.com', 'www.google.com'],
+    defaultFrontend: 'searxng',
+    frontends: {
+      searxng: { name: 'SearXNG', instances: ['https://search.sapti.me', 'https://searx.be'] },
+      whoogle: { name: 'Whoogle', instances: ['https://whoogle.dcs0.hu'] },
+      librex: { name: 'LibreX', instances: ['https://librex.beparanoid.de'] }
+    },
+    rules: [{ source: '^https?://(www\\.)?google\\.[^/]+/search\\?(.+)', path: '/search?$2' }]
+  },
+  maps: {
+    name: 'Google Maps',
+    confidence: 'high',
+    originalHosts: ['maps.google.com', 'www.google.com'],
+    defaultFrontend: 'osm',
+    frontends: {
+      osm: { name: 'OpenStreetMap', instances: ['https://www.openstreetmap.org'] }
+    },
+    rules: [
+      { source: '^https?://maps\\.google\\.[^/]+/(.*)', path: '/search?query=$1' },
+      { source: '^https?://(www\\.)?google\\.[^/]+/maps/(.*)', path: '/search?query=$2' }
+    ]
+  },
+  medium: {
+    name: 'Medium',
+    confidence: 'high',
+    originalHosts: ['medium.com', 'www.medium.com'],
+    defaultFrontend: 'scribe',
+    frontends: {
+      scribe: { name: 'Scribe', instances: ['https://scribe.rip'] },
+      freedium: { name: 'Freedium', instances: ['https://freedium.cfd'] }
+    },
+    rules: [{ source: '^https?://(www\\.)?medium\\.com/(.*)', path: '/$2' }]
+  },
+  wikipedia: {
+    name: 'Wikipedia',
+    confidence: 'high',
+    originalHosts: ['wikipedia.org', 'www.wikipedia.org'],
+    defaultFrontend: 'wikiless',
+    frontends: {
+      wikiless: { name: 'Wikiless', instances: ['https://wikiless.org', 'https://wiki.froth.zone'] }
+    },
+    rules: [{ source: '^https?://([a-z]+)\\.wikipedia\\.org/wiki/(.*)', path: '/wiki/$2' }]
+  },
+  imdb: {
+    name: 'IMDb',
+    confidence: 'high',
+    originalHosts: ['imdb.com', 'www.imdb.com'],
+    defaultFrontend: 'libremdb',
+    frontends: { libremdb: { name: 'libremdb', instances: ['https://libremdb.iket.me'] } },
+    rules: [{ source: '^https?://(www\\.)?imdb\\.com/(.*)', path: '/$2' }]
+  },
+  fandom: {
+    name: 'Fandom',
+    confidence: 'high',
+    originalHosts: ['fandom.com', 'www.fandom.com'],
+    defaultFrontend: 'breezeWiki',
+    frontends: { breezeWiki: { name: 'BreezeWiki', instances: ['https://breezewiki.com', 'https://antifandom.com'] } },
+    rules: [{ source: '^https?://([^./]+)\\.fandom\\.com/wiki/(.*)', path: '/$1/wiki/$2' }]
+  }
+}
+
+Object.assign(SERVICE_CATALOG, {
+  youtubeMusic: simpleService('YouTube Music', ['music.youtube.com'], 'hyperpipe', 'Hyperpipe', ['https://hyperpipe.surge.sh']),
+  chatGpt: simpleService('ChatGPT', ['chatgpt.com', 'chat.openai.com'], 'duckDuckGoAiChat', 'DuckDuckGo AI Chat', ['https://duck.ai']),
+  bluesky: simpleService('Bluesky', ['bsky.app', 'www.bsky.app'], 'skyview', 'Skyview', ['https://skyview.social']),
+  tumblr: simpleService('Tumblr', ['tumblr.com', 'www.tumblr.com'], 'priviblur', 'Priviblur', ['https://priviblur.fly.dev']),
+  twitch: simpleService('Twitch', ['twitch.tv', 'www.twitch.tv', 'm.twitch.tv'], 'safetwitch', 'SafeTwitch', ['https://safetwitch.drgns.space']),
+  bilibili: simpleService('Bilibili', ['bilibili.com', 'www.bilibili.com'], 'mikuInvidious', 'MikuInvidious', ['https://mikuinv.resrv.org']),
+  pixiv: simpleService('Pixiv', ['pixiv.net', 'www.pixiv.net'], 'pixivFe', 'PixivFE', ['https://pixivfe.exozy.me']),
+  imgur: simpleService('Imgur', ['imgur.com', 'www.imgur.com', 'i.imgur.com'], 'rimgo', 'Rimgo', ['https://rimgo.lunar.icu']),
+  pinterest: simpleService('Pinterest', ['pinterest.com', 'www.pinterest.com'], 'binternet', 'Binternet', ['https://binternet.ahwx.org']),
+  soundcloud: simpleService('SoundCloud', ['soundcloud.com', 'www.soundcloud.com'], 'tuboSoundcloud', 'Tubo', ['https://tubo.migalmoreno.com']),
+  bandcamp: simpleService('Bandcamp', ['bandcamp.com', 'www.bandcamp.com'], 'tent', 'Tent', ['https://tent.sny.sh']),
+  tekstowo: simpleService('Tekstowo', ['tekstowo.pl', 'www.tekstowo.pl'], 'tekstoLibre', 'TekstoLibre', ['https://tekstolibre.sny.sh']),
+  genius: simpleService('Genius', ['genius.com', 'www.genius.com'], 'dumb', 'Dumb', ['https://dm.vern.cc']),
+  quora: simpleService('Quora', ['quora.com', 'www.quora.com'], 'quetre', 'Quetre', ['https://quetre.iket.me']),
+  github: simpleService('GitHub', ['github.com', 'www.github.com'], 'gothub', 'GotHub', ['https://gh.vern.cc']),
+  gitlab: simpleService('GitLab', ['gitlab.com', 'www.gitlab.com'], 'laboratory', 'Laboratory', ['https://lab.vern.cc']),
+  stackOverflow: simpleService('Stack Overflow', ['stackoverflow.com', 'www.stackoverflow.com', 'stackexchange.com'], 'anonymousOverflow', 'AnonymousOverflow', ['https://ao.vern.cc']),
+  reuters: simpleService('Reuters', ['reuters.com', 'www.reuters.com'], 'neuters', 'Neuters', ['https://neuters.de']),
+  snopes: simpleService('Snopes', ['snopes.com', 'www.snopes.com'], 'suds', 'Suds', ['https://sd.vern.cc']),
+  ifunny: simpleService('iFunny', ['ifunny.co', 'www.ifunny.co'], 'unfunny', 'Unfunny', ['https://uf.vern.cc']),
+  tenor: simpleService('Tenor', ['tenor.com', 'www.tenor.com'], 'soprano', 'Soprano', ['https://sp.vern.cc']),
+  knowyourmeme: simpleService('Know Your Meme', ['knowyourmeme.com', 'www.knowyourmeme.com'], 'meme', 'Meme', ['https://meme.vern.cc']),
+  urbanDictionary: simpleService('Urban Dictionary', ['urbandictionary.com', 'www.urbandictionary.com'], 'ruralDictionary', 'Rural Dictionary', ['https://rd.vern.cc']),
+  goodreads: simpleService('Goodreads', ['goodreads.com', 'www.goodreads.com'], 'biblioReads', 'BiblioReads', ['https://biblioreads.ml']),
+  wolframAlpha: simpleService('WolframAlpha', ['wolframalpha.com', 'www.wolframalpha.com'], 'wolfreeAlpha', 'WolfreeAlpha', ['https://wolfreealpha.gitlab.io']),
+  instructables: simpleService('Instructables', ['instructables.com', 'www.instructables.com'], 'structables', 'Structables', ['https://structables.private.coffee']),
+  waybackMachine: simpleService('Wayback Machine', ['web.archive.org'], 'waybackClassic', 'Wayback Classic', ['https://web.archive.org']),
+  pastebin: simpleService('Pastebin', ['pastebin.com', 'www.pastebin.com'], 'pasted', 'Pasted', ['https://pasted.drakeerv.com']),
+  translate: simpleService('Google Translate', ['translate.google.com'], 'simplyTranslate', 'SimplyTranslate', ['https://simplytranslate.org']),
+  googleLens: simpleService('Google Lens', ['lens.google.com'], 'rens', 'Rens', ['https://lens.vern.cc']),
+  meet: simpleService('Google Meet', ['meet.google.com'], 'jitsi', 'Jitsi Meet', ['https://meet.jit.si']),
+  sendFiles: simpleService('Send Files', ['send.firefox.com'], 'send', 'Send', ['https://send.vis.ee']),
+  textStorage: simpleService('Text Storage', ['paste.mozilla.org', 'hastebin.com'], 'privateBin', 'PrivateBin', ['https://privatebin.net']),
+  office: simpleService('Office', ['office.com', 'www.office.com'], 'cryptPad', 'CryptPad', ['https://cryptpad.fr']),
+  ultimateGuitar: simpleService('Ultimate Guitar', ['ultimate-guitar.com', 'www.ultimate-guitar.com'], 'freetar', 'Freetar', ['https://freetar.de']),
+  baiduTieba: simpleService('Baidu Tieba', ['tieba.baidu.com'], 'ratAintTieba', 'RatAintTieba', ['https://rat.vern.cc']),
+  threads: simpleService('Threads', ['threads.net', 'www.threads.net'], 'shoelace', 'Shoelace', ['https://shoelace.vern.cc']),
+  deviantArt: simpleService('DeviantArt', ['deviantart.com', 'www.deviantart.com'], 'skunkyArt', 'SkunkyArt', ['https://skunkyart.frontendfriendly.xyz']),
+  geeksForGeeks: simpleService('GeeksForGeeks', ['geeksforgeeks.org', 'www.geeksforgeeks.org'], 'nerdsForNerds', 'NerdsForNerds', ['https://nerds.vern.cc']),
+  coub: simpleService('Coub', ['coub.com', 'www.coub.com'], 'koub', 'Koub', ['https://koub.vern.cc']),
+  chefkoch: simpleService('Chefkoch', ['chefkoch.de', 'www.chefkoch.de'], 'gocook', 'GoCook', ['https://gocook.vern.cc'])
+})
+
+const RESEARCHED_LIMITATIONS = [
+  'Safari DNR redirect rules require declarativeNetRequestWithHostAccess and user-granted host permissions for source and destination sites.',
+  'Safari documented RuleCondition support does not include tabIds, so per-tab bypass is approximated with exact-URL session allow rules.',
+  'DNR cannot run arbitrary JavaScript per request; random instance selection is implemented by regenerating rules from the selected or rotated instance.',
+  'Complex service-specific rewrites are implemented as researched templates and must be expanded service-by-service rather than copied from GPL code.'
+]
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
+function localized(key, fallback) {
+  return api.i18n?.getMessage(key) || fallback
+}
+
+function simpleService(name, originalHosts, defaultFrontend, frontendName, instances) {
+  const hosts = Array.from(new Set(originalHosts.map(host => host.replace(/^www\./, ''))))
+  return {
+    name,
+    confidence: 'starter',
+    originalHosts,
+    defaultFrontend,
+    frontends: { [defaultFrontend]: { name: frontendName, instances } },
+    rules: hosts.map(host => ({ source: `^https?://(www\\.)?${host.replace(/\./g, '\\.')}/?(.*)`, path: '/$2' }))
+  }
+}
+
+function defaultState() {
+  const services = {}
+  const balancedServices = new Set(PROFILES.balanced.enabledServices)
+  for (const [id, service] of Object.entries(SERVICE_CATALOG)) {
+    const frontendId = service.defaultFrontend
+    services[id] = {
+      enabled: balancedServices.has(id),
+      frontend: frontendId,
+      instance: service.frontends[frontendId].instances[0],
+      mode: 'selected',
+      customInstances: [],
+      favoriteInstances: [],
+      health: {}
+    }
+  }
+  return {
+    schemaVersion: 1,
+    globalEnabled: true,
+    profile: 'balanced',
+    services,
+    diagnostics: {
+      lastGeneratedAt: null,
+      lastRuleCount: 0,
+      bypassedUrls: [],
+      lastError: null,
+      lastHealthCheckAt: null,
+      lastHealthError: null,
+      lastInstanceRefreshAt: null,
+      lastInstanceRefreshError: null
+    }
+  }
+}
+
+async function storageGet(keys) {
+  return await callApi(api.storage.local, 'get', keys)
+}
+
+async function storageSet(value) {
+  return await callApi(api.storage.local, 'set', value)
+}
+
+function normalizeInstanceOrigin(value) {
+  try {
+    const url = new URL(String(value))
+    if (url.protocol !== 'https:') return null
+    return url.origin
+  } catch {
+    return null
+  }
+}
+
+function normalizeConfiguredInstance(serviceId, frontendId, value) {
+  const raw = String(value ?? '')
+  const builtin = SERVICE_CATALOG[serviceId]?.frontends?.[frontendId]?.instances ?? []
+  if (builtin.includes(raw)) return raw
+  return normalizeInstanceOrigin(raw)
+}
+
+function sanitizeStringArray(values, mapper = value => String(value)) {
+  if (!Array.isArray(values)) return []
+  return Array.from(new Set(values.map(mapper).filter(Boolean))).slice(0, 50)
+}
+
+function sanitizeHealth(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const result = {}
+  for (const [instance, health] of Object.entries(value)) {
+    const origin = normalizeInstanceOrigin(instance)
+    if (!origin || !health || typeof health !== 'object' || Array.isArray(health)) continue
+    result[origin] = {
+      ok: Boolean(health.ok),
+      status: Number.isFinite(health.status) ? Number(health.status) : null,
+      latencyMs: Number.isFinite(health.latencyMs) ? Math.max(0, Math.round(Number(health.latencyMs))) : null,
+      checkedAt: typeof health.checkedAt === 'string' ? health.checkedAt : null,
+      error: typeof health.error === 'string' ? health.error.slice(0, 500) : null
+    }
+  }
+  return result
+}
+
+function sanitizeServiceConfig(serviceId, rawConfig, defaultConfig) {
+  const service = SERVICE_CATALOG[serviceId]
+  let config = rawConfig && typeof rawConfig === 'object' && !Array.isArray(rawConfig) ? rawConfig : {}
+  if (serviceId === 'instagram' && config.frontend === 'proxigram' && (!config.instance || config.instance === 'https://proxigram.lunar.icu')) {
+    config = { ...config, frontend: defaultConfig.frontend, instance: defaultConfig.instance }
+  }
+  if (serviceId === 'youtube' && config.frontend === 'invidious' && ['https://inv.nadeko.net', 'https://yewtu.be', 'https://vid.puffyan.us'].includes(config.instance)) {
+    config = { ...config, instance: defaultConfig.instance }
+  }
+  const frontend = config.frontend in service.frontends ? config.frontend : defaultConfig.frontend
+  const defaultInstance = service.frontends[frontend].instances[0]
+  const customInstances = sanitizeStringArray(config.customInstances, normalizeInstanceOrigin)
+  const favoriteInstances = sanitizeStringArray(config.favoriteInstances, normalizeInstanceOrigin)
+  const allowedInstances = new Set([...customInstances, ...favoriteInstances, ...service.frontends[frontend].instances])
+  const instance = normalizeConfiguredInstance(serviceId, frontend, config.instance)
+  return {
+    enabled: typeof config.enabled === 'boolean' ? config.enabled : defaultConfig.enabled,
+    frontend,
+    instance: instance && allowedInstances.has(instance) ? instance : defaultInstance,
+    mode: config.mode === 'rotating' ? 'rotating' : 'selected',
+    customInstances,
+    favoriteInstances,
+    health: sanitizeHealth(config.health)
+  }
+}
+
+function sanitizeServiceUpdate(serviceId, currentConfig, patch) {
+  const service = SERVICE_CATALOG[serviceId]
+  if (!service) throw new Error('Unknown service')
+  const input = patch && typeof patch === 'object' && !Array.isArray(patch) ? patch : {}
+  const frontend = input.frontend === undefined
+    ? currentConfig.frontend
+    : (input.frontend in service.frontends ? input.frontend : currentConfig.frontend)
+  const customInstances = input.customInstances === undefined
+    ? sanitizeStringArray(currentConfig.customInstances, normalizeInstanceOrigin)
+    : sanitizeStringArray(input.customInstances, normalizeInstanceOrigin)
+  const favoriteInstances = input.favoriteInstances === undefined
+    ? sanitizeStringArray(currentConfig.favoriteInstances, normalizeInstanceOrigin)
+    : sanitizeStringArray(input.favoriteInstances, normalizeInstanceOrigin)
+  const allowedInstances = new Set([...customInstances, ...favoriteInstances, ...service.frontends[frontend].instances])
+  const currentInstance = normalizeConfiguredInstance(serviceId, frontend, currentConfig.instance)
+  const requestedInstance = input.instance === undefined ? currentInstance : normalizeConfiguredInstance(serviceId, frontend, input.instance)
+  const defaultInstance = service.frontends[frontend].instances[0]
+  return {
+    enabled: input.enabled === undefined ? Boolean(currentConfig.enabled) : Boolean(input.enabled),
+    frontend,
+    instance: requestedInstance && allowedInstances.has(requestedInstance) ? requestedInstance : (currentInstance && allowedInstances.has(currentInstance) ? currentInstance : defaultInstance),
+    mode: input.mode === undefined ? (currentConfig.mode === 'rotating' ? 'rotating' : 'selected') : (input.mode === 'rotating' ? 'rotating' : 'selected'),
+    customInstances,
+    favoriteInstances,
+    health: sanitizeHealth(currentConfig.health)
+  }
+}
+
+function migrateState(rawState) {
+  const defaults = defaultState()
+  const input = rawState && typeof rawState === 'object' && !Array.isArray(rawState) ? rawState : {}
+  const migrations = []
+  if (!rawState || rawState.schemaVersion !== defaults.schemaVersion) {
+    migrations.push({ from: rawState?.schemaVersion ?? 0, to: defaults.schemaVersion, at: new Date().toISOString() })
+  }
+  const state = { ...defaults }
+  state.schemaVersion = defaults.schemaVersion
+  state.globalEnabled = typeof input.globalEnabled === 'boolean' ? input.globalEnabled : defaults.globalEnabled
+  state.profile = input.profile in PROFILES ? input.profile : defaults.profile
+  state.services = {}
+  for (const [serviceId, serviceDefaults] of Object.entries(defaults.services)) {
+    state.services[serviceId] = sanitizeServiceConfig(serviceId, input.services?.[serviceId], serviceDefaults)
+  }
+  state.diagnostics = { ...defaults.diagnostics }
+  if (input.diagnostics && typeof input.diagnostics === 'object' && !Array.isArray(input.diagnostics)) {
+    state.diagnostics = {
+      ...state.diagnostics,
+      lastGeneratedAt: typeof input.diagnostics.lastGeneratedAt === 'string' ? input.diagnostics.lastGeneratedAt : null,
+      lastRuleCount: Number.isFinite(input.diagnostics.lastRuleCount) ? Math.max(0, Math.round(Number(input.diagnostics.lastRuleCount))) : 0,
+      lastError: typeof input.diagnostics.lastError === 'string' ? input.diagnostics.lastError.slice(0, 500) : null,
+      bypassedUrls: sanitizeStringArray(input.diagnostics.bypassedUrls, value => {
+        try { return new URL(String(value)).href } catch { return null }
+      }).slice(0, 20),
+      lastHealthCheckAt: typeof input.diagnostics.lastHealthCheckAt === 'string' ? input.diagnostics.lastHealthCheckAt : null,
+      lastHealthError: typeof input.diagnostics.lastHealthError === 'string' ? input.diagnostics.lastHealthError.slice(0, 500) : null,
+      lastInstanceRefreshAt: typeof input.diagnostics.lastInstanceRefreshAt === 'string' ? input.diagnostics.lastInstanceRefreshAt : null,
+      lastInstanceRefreshError: typeof input.diagnostics.lastInstanceRefreshError === 'string' ? input.diagnostics.lastInstanceRefreshError.slice(0, 500) : null,
+      migrations: Array.isArray(input.diagnostics.migrations) ? input.diagnostics.migrations.filter(item => item && typeof item === 'object').slice(-10) : []
+    }
+  }
+  if (migrations.length) state.diagnostics.migrations = [...(state.diagnostics.migrations ?? []), ...migrations].slice(-10)
+  return state
+}
+
+async function getState() {
+  const stored = await storageGet(['freedirectState'])
+  return migrateState(stored.freedirectState)
+}
+
+async function saveState(state) {
+  await storageSet({ freedirectState: state })
+}
+
+function mergePublicInstanceData(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return 0
+  let added = 0
+  for (const service of Object.values(SERVICE_CATALOG)) {
+    for (const [frontendId, frontend] of Object.entries(service.frontends)) {
+      const publicInstances = sanitizeStringArray(data[frontendId]?.clearnet, normalizeInstanceOrigin)
+      if (!publicInstances.length) continue
+      const before = frontend.instances.length
+      frontend.instances = Array.from(new Set([frontend.instances[0], ...publicInstances, ...frontend.instances.slice(1)].filter(Boolean)))
+      added += Math.max(0, frontend.instances.length - before)
+    }
+  }
+  return added
+}
+
+async function loadBundledPublicInstances() {
+  if (bundledInstancesLoaded) return { ok: true, bundled: true }
+  const url = api.runtime?.getURL ? api.runtime.getURL(INSTANCE_SNAPSHOT_PATH) : INSTANCE_SNAPSHOT_PATH
+  const response = await fetch(url, { cache: 'no-store' })
+  if (!response.ok) throw new Error(`Bundled instance snapshot failed: HTTP ${response.status}`)
+  const data = await response.json()
+  const added = mergePublicInstanceData(data)
+  bundledInstancesLoaded = true
+  return { ok: true, bundled: true, added }
+}
+
+async function loadPublicInstances({ force = false, bundledOnly = false } = {}) {
+  try { await loadBundledPublicInstances() } catch {}
+  const stored = await storageGet(['freedirectPublicInstances', 'freedirectState'])
+  const cached = stored.freedirectPublicInstances
+  if (cached?.data) mergePublicInstanceData(cached.data)
+  if (bundledOnly) return { ok: true, bundled: true, cached: Boolean(cached?.data), fetchedAt: cached?.fetchedAt ?? null }
+  if (!force && cached?.data && Date.now() - Date.parse(cached.fetchedAt || 0) < INSTANCE_CACHE_MAX_AGE_MS) {
+    return { ok: true, cached: true, fetchedAt: cached.fetchedAt }
+  }
+  let lastError = null
+  for (const url of INSTANCE_SOURCES) {
+    try {
+      const response = await fetchWithTimeout(url, HEALTH_TIMEOUT_MS)
+      if (!response.response?.ok) throw new Error(`HTTP ${response.response?.status || 'failed'}`)
+      const data = await response.response.json()
+      const fetchedAt = new Date().toISOString()
+      mergePublicInstanceData(data)
+      await storageSet({ freedirectPublicInstances: { fetchedAt, source: url, data } })
+      const state = migrateState(stored.freedirectState)
+      state.diagnostics.lastInstanceRefreshAt = fetchedAt
+      state.diagnostics.lastInstanceRefreshError = null
+      await saveState(state)
+      return { ok: true, cached: false, fetchedAt, source: url }
+    } catch (error) {
+      lastError = error
+    }
+  }
+  if (cached?.data) {
+    mergePublicInstanceData(cached.data)
+    return { ok: true, cached: true, fetchedAt: cached.fetchedAt, warning: String(lastError?.message ?? lastError) }
+  }
+  const state = migrateState(stored.freedirectState)
+  state.diagnostics.lastInstanceRefreshError = String(lastError?.message ?? lastError ?? 'No public instance source available')
+  await saveState(state)
+  return { ok: false, reason: state.diagnostics.lastInstanceRefreshError }
+}
+
+function selectedInstance(serviceId, state) {
+  const service = SERVICE_CATALOG[serviceId]
+  const config = state.services[serviceId]
+  const frontendId = config.frontend in service.frontends ? config.frontend : service.defaultFrontend
+  const frontend = service.frontends[frontendId]
+  const candidates = [...(config.favoriteInstances ?? []), ...(config.customInstances ?? []), ...frontend.instances]
+  if (config.mode === 'rotating') {
+    const day = Math.floor(Date.now() / 86400000)
+    return candidates[day % candidates.length]
+  }
+  return config.instance || candidates[0]
+}
+
+function jsSubstitution(instance, path) {
+  return instance.endsWith('://') ? instance + path : instance.replace(/\/$/, '') + path
+}
+
+function dnrSubstitution(instance, path) {
+  return instance.endsWith('://') ? instance + path.replaceAll('$', '\\') : instance.replace(/\/$/, '') + path.replaceAll('$', '\\')
+}
+
+function ruleRecords(state) {
+  if (!state.globalEnabled) return []
+  const records = []
+  let id = RULE_ID_BASE
+  for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
+    const config = state.services[serviceId]
+    if (!config?.enabled) continue
+    const frontendId = config.frontend in service.frontends ? config.frontend : service.defaultFrontend
+    const frontend = service.frontends[frontendId]
+    if (frontend.appProtocol) continue
+    const instance = selectedInstance(serviceId, state)
+    const templates = frontend.rules ?? service.rules
+    for (const template of templates) {
+      if (records.length >= MAX_RULES) break
+      const rule = {
+        id: id++,
+        priority: template.priority ?? 10,
+        action: {
+          type: 'redirect',
+          redirect: { regexSubstitution: dnrSubstitution(instance, template.path) }
+        },
+        condition: {
+          regexFilter: template.source,
+          resourceTypes: ['main_frame']
+        }
+      }
+      records.push({
+        id: rule.id,
+        serviceId,
+        serviceName: service.name,
+        frontendId,
+        frontendName: service.frontends[frontendId].name,
+        instance,
+        source: template.source,
+        substitution: dnrSubstitution(instance, template.path),
+        rule
+      })
+    }
+  }
+  return records
+}
+
+function staticOverrideRules(state) {
+  const rules = []
+  const youtubeFrontend = state.services.youtube?.frontend
+  const youtubeUsesApp = SERVICE_CATALOG.youtube.frontends[youtubeFrontend]?.appProtocol
+  if (!state.globalEnabled || !state.services.youtube?.enabled || youtubeUsesApp) {
+    rules.push(
+      { id: STATIC_OVERRIDE_RULE_ID_BASE + 1, priority: 100, action: { type: 'allow' }, condition: { regexFilter: '^https?://(www\\.|m\\.)?youtube\\.com/watch\\?v=([^?&#/]+)(.*)', resourceTypes: ['main_frame'] } },
+      { id: STATIC_OVERRIDE_RULE_ID_BASE + 2, priority: 100, action: { type: 'allow' }, condition: { regexFilter: '^https?://youtu\\.be/([^?&#/]+)(.*)', resourceTypes: ['main_frame'] } },
+      { id: STATIC_OVERRIDE_RULE_ID_BASE + 3, priority: 100, action: { type: 'allow' }, condition: { regexFilter: '^https?://(www\\.|m\\.)?youtube\\.com/(.*)', resourceTypes: ['main_frame'] } },
+      { id: STATIC_OVERRIDE_RULE_ID_BASE + 4, priority: 100, action: { type: 'allow' }, condition: { regexFilter: '^https?://(www\\.)?youtube-nocookie\\.com/embed/([^?&#/]+)(.*)', resourceTypes: ['main_frame'] } }
+    )
+  }
+  if (!state.globalEnabled || !state.services.reddit?.enabled) {
+    rules.push(
+      { id: STATIC_OVERRIDE_RULE_ID_BASE + 5, priority: 100, action: { type: 'allow' }, condition: { regexFilter: '^https?://(www\\.|old\\.|new\\.)?reddit\\.com/(.*)', resourceTypes: ['main_frame'] } },
+      { id: STATIC_OVERRIDE_RULE_ID_BASE + 6, priority: 100, action: { type: 'allow' }, condition: { regexFilter: '^https?://redd\\.it/(.*)', resourceTypes: ['main_frame'] } }
+    )
+  }
+  if (!state.globalEnabled || !state.services.twitter?.enabled) {
+    rules.push(
+      { id: STATIC_OVERRIDE_RULE_ID_BASE + 7, priority: 100, action: { type: 'allow' }, condition: { regexFilter: '^https?://(www\\.|mobile\\.)?(twitter|x)\\.com/(.*)', resourceTypes: ['main_frame'] } }
+    )
+  }
+  return rules
+}
+
+function makeRules(state) {
+  return [...staticOverrideRules(state), ...ruleRecords(state).map(record => record.rule)]
+}
+
+function rulePreview(state) {
+  return ruleRecords(state).map(({ rule, ...metadata }) => metadata)
+}
+
+async function supportedDnrRules(rules) {
+  if (!api.declarativeNetRequest?.isRegexSupported) return { rules, rejected: [] }
+  const accepted = []
+  const rejected = []
+  for (const rule of rules) {
+    try {
+      const result = await callApi(api.declarativeNetRequest, 'isRegexSupported', { regex: rule.condition.regexFilter })
+      if (result?.isSupported === false) rejected.push({ id: rule.id, reason: result.reason || 'unsupported regex' })
+      else accepted.push(rule)
+    } catch {
+      accepted.push(rule)
+    }
+  }
+  return { rules: accepted, rejected }
+}
+
+async function rebuildRules() {
+  const state = await getState()
+  const existing = await callApi(api.declarativeNetRequest, 'getDynamicRules')
+  const removeRuleIds = existing.map(rule => rule.id)
+  const requestedRules = makeRules(state)
+  const validation = await supportedDnrRules(requestedRules)
+  const addRules = validation.rules
+  try {
+    await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds, addRules })
+    state.diagnostics.lastGeneratedAt = new Date().toISOString()
+    state.diagnostics.lastRuleCount = addRules.length
+    state.diagnostics.lastError = validation.rejected.length ? `${validation.rejected.length} unsupported redirect rules were skipped.` : null
+  } catch (error) {
+    state.diagnostics.lastGeneratedAt = new Date().toISOString()
+    state.diagnostics.lastRuleCount = 0
+    state.diagnostics.lastError = String(error?.message ?? error)
+  }
+  await saveState(state)
+  return state.diagnostics
+}
+
+function serviceForOriginal(url) {
+  const host = url.hostname.replace(/^www\./, '')
+  for (const [id, service] of Object.entries(SERVICE_CATALOG)) {
+    if (service.originalHosts.some(candidate => host === candidate.replace(/^www\./, '') || host.endsWith('.' + candidate.replace(/^www\./, '')))) {
+      return [id, service]
+    }
+  }
+  return null
+}
+
+function applyTemplateRedirect(urlString, state) {
+  return diagnoseUrl(urlString, state).redirectUrl
+}
+
+function diagnoseUrl(urlString, state) {
+  let url
+  try { url = new URL(urlString) } catch { return { url: null, serviceId: null, serviceName: null, frontendName: null, instance: null, redirectUrl: null, reverseUrl: null, reason: 'invalid-url' } }
+  const reversed = reverseUrl(urlString, state)
+  if ((state.diagnostics.bypassedUrls ?? []).includes(url.href)) return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, redirectUrl: null, reverseUrl: reversed, reason: 'bypassed' }
+  if (!state.globalEnabled) return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, redirectUrl: null, reverseUrl: reversed, reason: 'disabled' }
+  for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
+    const config = state.services[serviceId]
+    if (!config?.enabled) continue
+    const frontendId = config.frontend in service.frontends ? config.frontend : service.defaultFrontend
+    const frontend = service.frontends[frontendId]
+    const instance = selectedInstance(serviceId, state).replace(/\/$/, '')
+    const templates = frontend.rules ?? service.rules
+    for (const template of templates) {
+      const regex = new RegExp(template.source)
+      if (regex.test(url.href)) {
+        return {
+          url: url.href,
+          serviceId,
+          serviceName: service.name,
+          frontendName: service.frontends[frontendId].name,
+          instance,
+          redirectUrl: url.href.replace(regex, jsSubstitution(instance, template.path)),
+          reverseUrl: reversed,
+          reason: 'matched'
+        }
+      }
+    }
+  }
+  return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, redirectUrl: null, reverseUrl: reversed, reason: reversed ? 'frontend' : 'no-match' }
+}
+
+function reverseUrl(urlString, state) {
+  let url
+  try { url = new URL(urlString) } catch { return null }
+  for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
+    const config = state.services[serviceId]
+    if (!config) continue
+    const frontends = Object.entries(service.frontends)
+    for (const [, frontend] of frontends) {
+      const instances = [...(config.favoriteInstances ?? []), ...(config.customInstances ?? []), ...frontend.instances]
+      for (const instance of instances) {
+        let instanceUrl
+        try { instanceUrl = new URL(instance) } catch { continue }
+        if (url.hostname !== instanceUrl.hostname) continue
+        const primaryHost = service.originalHosts[0]
+        if (serviceId === 'youtube' && url.pathname.startsWith('/watch')) return `https://www.youtube.com${url.pathname}${url.search}`
+        if (serviceId === 'youtube' && url.pathname.startsWith('/embed/')) return `https://www.youtube.com${url.pathname}${url.search}`
+        if (serviceId === 'wikipedia' && url.pathname.startsWith('/wiki/')) return `https://en.wikipedia.org${url.pathname}${url.search}${url.hash}`
+        if (serviceId === 'fandom') {
+          const match = url.pathname.match(/^\/([^/]+)\/wiki\/(.*)$/)
+          if (match) return `https://${match[1]}.fandom.com/wiki/${match[2]}${url.search}${url.hash}`
+        }
+        if (serviceId === 'search' && url.pathname.startsWith('/search')) return `https://www.google.com${url.pathname}${url.search}${url.hash}`
+        if (serviceId === 'maps' && url.pathname.startsWith('/search')) return `https://maps.google.com${url.pathname}${url.search}${url.hash}`
+        return `https://${primaryHost}${url.pathname}${url.search}${url.hash}`
+      }
+    }
+  }
+  return null
+}
+
+function applyProfile(state, profileId) {
+  if (!(profileId in PROFILES)) throw new Error('Unknown profile')
+  state.profile = profileId
+  const profile = PROFILES[profileId]
+  if (profile.enabledServices === 'all') {
+    for (const serviceId of Object.keys(state.services)) state.services[serviceId].enabled = true
+  } else if (Array.isArray(profile.enabledServices)) {
+    for (const serviceId of Object.keys(state.services)) {
+      state.services[serviceId].enabled = profile.enabledServices.includes(serviceId)
+    }
+  }
+  return state
+}
+
+async function fetchWithTimeout(url, timeout = HEALTH_TIMEOUT_MS) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeout)
+  const started = performance.now()
+  try {
+    const response = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal })
+    return { ok: response.ok || response.type === 'opaque', status: response.status || null, latencyMs: Math.round(performance.now() - started), response }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function checkInstanceHealth(serviceId, instance) {
+  const service = SERVICE_CATALOG[serviceId]
+  if (!service) throw new Error('Unknown service')
+  const frontendId = Object.entries(service.frontends).find(([, frontend]) => frontend.instances.includes(instance))?.[0]
+  if (frontendId && service.frontends[frontendId].appProtocol) return { ok: true, status: null, latencyMs: null, checkedAt: new Date().toISOString(), error: null }
+  const origin = normalizeInstanceOrigin(instance)
+  if (!origin) throw new Error('Instance must be an HTTPS URL')
+  const state = await getState()
+  let health
+  try {
+    const result = await fetchWithTimeout(origin)
+    health = { ...result, checkedAt: new Date().toISOString(), error: null }
+  } catch (error) {
+    health = { ok: false, status: null, latencyMs: null, checkedAt: new Date().toISOString(), error: String(error?.message ?? error) }
+  }
+  state.services[serviceId].health = { ...(state.services[serviceId].health ?? {}), [origin]: health }
+  state.diagnostics.lastHealthCheckAt = health.checkedAt
+  state.diagnostics.lastHealthError = health.ok ? null : health.error
+  await saveState(state)
+  return health
+}
+
+async function checkAllSelectedHealth() {
+  const state = await getState()
+  const results = {}
+  for (const [serviceId, config] of Object.entries(state.services)) {
+    if (!config.enabled) continue
+    const instance = selectedInstance(serviceId, state)
+    results[serviceId] = await checkInstanceHealth(serviceId, instance)
+  }
+  return results
+}
+
+async function selectBestInstance(serviceId) {
+  await loadPublicInstances()
+  const state = await getState()
+  const service = SERVICE_CATALOG[serviceId]
+  const config = state.services[serviceId]
+  if (!service || !config) throw new Error('Unknown service')
+  const frontendId = config.frontend in service.frontends ? config.frontend : service.defaultFrontend
+  const frontend = service.frontends[frontendId]
+  const candidates = Array.from(new Set([...(config.favoriteInstances ?? []), ...(config.customInstances ?? []), ...frontend.instances])).slice(0, 80)
+  if (!candidates.length) throw new Error('No instances available')
+  if (frontend.appProtocol) {
+    const best = { ok: true, status: null, latencyMs: null, checkedAt: new Date().toISOString(), error: null }
+    state.services[serviceId] = sanitizeServiceUpdate(serviceId, config, { instance: candidates[0], mode: 'selected' })
+    await saveState(state)
+    await rebuildRules()
+    return { serviceId, instance: candidates[0], health: best, checked: 1 }
+  }
+  let best = null
+  const health = { ...(config.health ?? {}) }
+  const checkedAt = new Date().toISOString()
+  await Promise.all(candidates.map(async instance => {
+    try {
+      const result = await fetchWithTimeout(instance, 3500)
+      const record = { ok: result.ok, status: result.status, latencyMs: result.latencyMs, checkedAt, error: null }
+      health[instance] = record
+      if (record.ok && (!best || record.latencyMs < best.health.latencyMs)) best = { instance, health: record }
+    } catch (error) {
+      health[instance] = { ok: false, status: null, latencyMs: null, checkedAt, error: String(error?.message ?? error) }
+    }
+  }))
+  if (!best) throw new Error('No reachable instance found')
+  state.services[serviceId] = sanitizeServiceUpdate(serviceId, config, { instance: best.instance, mode: 'selected' })
+  state.services[serviceId].health = health
+  state.diagnostics.lastHealthCheckAt = checkedAt
+  state.diagnostics.lastHealthError = null
+  await saveState(state)
+  await rebuildRules()
+  return { serviceId, instance: best.instance, health: best.health, checked: candidates.length }
+}
+
+async function commandState() {
+  if (!api.commands?.getAll) return { available: false, commands: [], reason: 'commands.getAll unavailable' }
+  try {
+    return { available: true, commands: await callApi(api.commands, 'getAll') }
+  } catch (error) {
+    return { available: false, commands: [], reason: String(error?.message ?? error) }
+  }
+}
+
+async function permissionState() {
+  if (!api.permissions?.contains) {
+    return { available: false, allUrls: null, reason: 'permissions.contains unavailable' }
+  }
+  try {
+    return { available: true, allUrls: await callApi(api.permissions, 'contains', { origins: ['<all_urls>'] }) }
+  } catch (error) {
+    return { available: false, allUrls: null, reason: String(error?.message ?? error) }
+  }
+}
+
+async function activeTabPermissionState() {
+  const tab = await activeTab()
+  if (!tab?.url || !api.permissions?.contains) return { available: false, origin: null, granted: null }
+  try {
+    const origin = new URL(tab.url).origin + '/*'
+    return { available: true, origin, granted: await callApi(api.permissions, 'contains', { origins: [origin] }) }
+  } catch (error) {
+    return { available: false, origin: null, granted: null, reason: String(error?.message ?? error) }
+  }
+}
+
+async function sendNativeMessage(message) {
+  if (!api.runtime.sendNativeMessage) return { ok: false, reason: 'native messaging unavailable' }
+  return await new Promise(resolve => {
+    let settled = false
+    const timer = setTimeout(() => finish({ ok: false, reason: 'native messaging timed out' }), HEALTH_TIMEOUT_MS)
+    const finish = response => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(response ?? { ok: false, reason: api.runtime.lastError?.message ?? 'empty native response' })
+    }
+    try {
+      const result = api.runtime.sendNativeMessage(NATIVE_APP_ID, message, finish)
+      if (result?.then) result.then(finish, error => finish({ ok: false, reason: String(error?.message ?? error) }))
+    } catch (error) {
+      try {
+        const result = api.runtime.sendNativeMessage(message, finish)
+        if (result?.then) result.then(finish, innerError => finish({ ok: false, reason: String(innerError?.message ?? innerError) }))
+      } catch (innerError) {
+        finish({ ok: false, reason: String(innerError?.message ?? innerError) })
+      }
+    }
+  })
+}
+
+async function activeTab() {
+  const tabs = await callApi(api.tabs, 'query', { active: true, currentWindow: true })
+  return tabs?.[0]
+}
+
+async function updateActionIconForTab(tab) {
+  const actionApi = api.action ?? api.browserAction
+  if (!actionApi?.setIcon) return
+  try {
+    const state = await getState()
+    const diagnosis = tab?.url ? diagnoseUrl(tab.url, state) : null
+    const active = Boolean(state.globalEnabled && (diagnosis?.redirectUrl || diagnosis?.reverseUrl))
+    const details = { path: active ? TOOLBAR_ICONS.active : TOOLBAR_ICONS.inactive }
+    if (tab?.id !== undefined) details.tabId = tab.id
+    await callApi(actionApi, 'setIcon', details)
+  } catch {}
+}
+
+async function updateCurrentActionIcon() {
+  try { await updateActionIconForTab(await activeTab()) } catch {}
+}
+
+function safeHttpUrl(value) {
+  try {
+    const url = new URL(value)
+    return /^https?:$/.test(url.protocol) ? url.href : null
+  } catch {
+    return null
+  }
+}
+
+function shouldRememberTabUrl(urlString, state) {
+  const url = safeHttpUrl(urlString)
+  if (!url) return false
+  const diagnosis = diagnoseUrl(url, state)
+  return !diagnosis.redirectUrl
+}
+
+async function finishAppProtocolRedirect(tabId, previousUrl) {
+  await new Promise(resolve => setTimeout(resolve, 900))
+  const restoreUrl = safeHttpUrl(previousUrl)
+  if (restoreUrl) {
+    try { await callApi(api.tabs, 'update', tabId, { url: restoreUrl }); return } catch {}
+  }
+  try { if (api.tabs?.remove) await callApi(api.tabs, 'remove', tabId) } catch {}
+}
+
+async function openRedirectInTab(tabId, redirected, previousUrl = null) {
+  await callApi(api.tabs, 'update', tabId, { url: redirected })
+  if (redirected.startsWith('freetube://')) finishAppProtocolRedirect(tabId, previousUrl)
+}
+
+async function redirectCurrent() {
+  const tab = await activeTab()
+  if (!tab?.url) return null
+  const state = await getState()
+  const redirected = applyTemplateRedirect(tab.url, state)
+  if (redirected) await openRedirectInTab(tab.id, redirected, tabLastGoodUrls.get(tab.id))
+  return redirected
+}
+
+async function reverseCurrent() {
+  const tab = await activeTab()
+  if (!tab?.url) return null
+  const state = await getState()
+  const reversed = reverseUrl(tab.url, state)
+  if (reversed) await callApi(api.tabs, 'update', tab.id, { url: reversed })
+  return reversed
+}
+
+async function originalForCurrent() {
+  const tab = await activeTab()
+  if (!tab?.url) return null
+  const state = await getState()
+  return reverseUrl(tab.url, state) ?? tab.url
+}
+
+async function diagnoseCurrent() {
+  const tab = await activeTab()
+  if (!tab?.url) return null
+  const state = await getState()
+  return diagnoseUrl(tab.url, state)
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+async function bypassCurrent() {
+  const tab = await activeTab()
+  if (!tab?.url) return null
+  const existing = await callApi(api.declarativeNetRequest, 'getSessionRules')
+  const removeRuleIds = existing.filter(rule => rule.id >= SESSION_RULE_ID_BASE).map(rule => rule.id)
+  const id = SESSION_RULE_ID_BASE + Math.max(1, Number(tab.id || 1))
+  const rule = {
+    id,
+    priority: 100,
+    action: { type: 'allowAllRequests' },
+    condition: { regexFilter: `^${escapeRegex(tab.url)}$`, resourceTypes: ['main_frame'] }
+  }
+  await callApi(api.declarativeNetRequest, 'updateSessionRules', { removeRuleIds, addRules: [rule] })
+  const state = await getState()
+  state.diagnostics.bypassedUrls = [tab.url, ...(state.diagnostics.bypassedUrls ?? [])].slice(0, 20)
+  await saveState(state)
+  await callApi(api.tabs, 'reload', tab.id)
+  return tab.url
+}
+
+async function clearBypasses() {
+  const existing = await callApi(api.declarativeNetRequest, 'getSessionRules')
+  const removeRuleIds = existing.filter(rule => rule.id >= SESSION_RULE_ID_BASE).map(rule => rule.id)
+  await callApi(api.declarativeNetRequest, 'updateSessionRules', { removeRuleIds, addRules: [] })
+  const state = await getState()
+  state.diagnostics.bypassedUrls = []
+  await saveState(state)
+  return { cleared: removeRuleIds.length }
+}
+
+let menusCreated = false
+let menusCreating = null
+
+async function safeCreateMenu(item) {
+  if (!api.contextMenus?.create) return
+  await new Promise(resolve => {
+    try {
+      const result = api.contextMenus.create(item, () => {
+        // Consume duplicate-id/other creation errors so Safari does not show
+        // unchecked runtime.lastError diagnostics in the extension page.
+        lastRuntimeError()
+        resolve()
+      })
+      if (result?.then) result.then(resolve, resolve)
+      else if (api === globalThis.browser) resolve()
+    } catch {
+      resolve()
+    }
+  })
+}
+
+async function createMenus() {
+  if (!api.contextMenus || menusCreated) return
+  if (menusCreating) return menusCreating
+  menusCreating = (async () => {
+  try {
+    if (api.contextMenus.removeAll) await callApi(api.contextMenus, 'removeAll')
+  } catch {}
+  const items = [
+    { id: 'freedirect-redirect', title: localized('menuRedirect', 'Freedirect: Redirect'), contexts: ['page', 'link'] },
+    { id: 'freedirect-redirect-new-tab', title: localized('menuRedirectNewTab', 'Freedirect: Redirect in New Tab'), contexts: ['link'] },
+    { id: 'freedirect-reverse', title: localized('menuOpenOriginal', 'Freedirect: Open original'), contexts: ['page', 'link'] },
+    { id: 'freedirect-reverse-new-tab', title: localized('menuOpenOriginalNewTab', 'Freedirect: Open original in New Tab'), contexts: ['link'] },
+    { id: 'freedirect-bypass', title: localized('menuBypass', 'Freedirect: Bypass this URL'), contexts: ['page'] },
+    { id: 'freedirect-options', title: localized('menuSettings', 'Freedirect Settings'), contexts: ['action'] }
+  ]
+  menusCreated = true
+  for (const item of items) await safeCreateMenu(item)
+  })()
+  try { await menusCreating } finally { menusCreating = null }
+}
+
+async function ensureStaticRulesEnabled() {
+  const dnr = api.declarativeNetRequest
+  if (!dnr?.getEnabledRulesets || !dnr?.updateEnabledRulesets) return
+  try {
+    const enabled = await callApi(dnr, 'getEnabledRulesets')
+    if (!enabled?.includes(STATIC_RULESET_ID)) await callApi(dnr, 'updateEnabledRulesets', { enableRulesetIds: [STATIC_RULESET_ID] })
+  } catch {}
+}
+
+async function ensureInitialized({ rebuildIfMissing = false } = {}) {
+  const stored = await storageGet(['freedirectState'])
+  if (!stored.freedirectState) {
+    await saveState(defaultState())
+  } else {
+    const migrated = migrateState(stored.freedirectState)
+    if (stored.freedirectState.schemaVersion !== migrated.schemaVersion) await saveState(migrated)
+  }
+  try { await loadPublicInstances({ bundledOnly: true }) } catch {}
+  await ensureStaticRulesEnabled()
+  await createMenus()
+  await updateCurrentActionIcon()
+  if (rebuildIfMissing && api.declarativeNetRequest?.getDynamicRules) {
+    const state = await getState()
+    const existing = await callApi(api.declarativeNetRequest, 'getDynamicRules')
+    if (state.globalEnabled && existing.length === 0 && Object.values(state.services).some(service => service.enabled)) {
+      await rebuildRules()
+    }
+  }
+}
+
+api.runtime.onInstalled.addListener(async () => {
+  await ensureInitialized()
+  await rebuildRules()
+})
+
+api.runtime.onStartup?.addListener(async () => {
+  await ensureInitialized({ rebuildIfMissing: true })
+})
+
+api.storage.onChanged?.addListener((changes, area) => {
+  // Mutating diagnostics during rule rebuild also writes storage. Rebuilds are
+  // therefore triggered by explicit settings/actions, not every local write.
+})
+
+api.tabs?.onActivated?.addListener(() => { updateCurrentActionIcon() })
+api.tabs?.onUpdated?.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'loading' || changeInfo.url || tab?.active) updateActionIconForTab(tab)
+  try {
+    const state = await getState()
+    if (tab?.url && shouldRememberTabUrl(tab.url, state)) tabLastGoodUrls.set(tabId, tab.url)
+  } catch {}
+})
+api.webNavigation?.onBeforeNavigate?.addListener(async details => {
+  if (details.frameId !== 0 || !details.tabId || !/^https?:/.test(details.url || '')) return
+  try {
+    const state = await getState()
+    const redirected = applyTemplateRedirect(details.url, state)
+    if (redirected && redirected !== details.url) await openRedirectInTab(details.tabId, redirected, tabLastGoodUrls.get(details.tabId))
+  } catch {}
+})
+
+api.contextMenus?.onClicked?.addListener(async (info, tab) => {
+  const url = info.linkUrl || info.pageUrl || tab?.url
+  const state = await getState()
+  if (info.menuItemId === 'freedirect-options') return api.runtime.openOptionsPage()
+  if (info.menuItemId === 'freedirect-bypass') return bypassCurrent()
+  if (!url) return
+  if (info.menuItemId === 'freedirect-redirect') {
+    const redirected = applyTemplateRedirect(url, state)
+    if (redirected) return openRedirectInTab(tab.id, redirected, tabLastGoodUrls.get(tab.id))
+  }
+  if (info.menuItemId === 'freedirect-redirect-new-tab') {
+    const redirected = applyTemplateRedirect(url, state)
+    if (redirected) return callApi(api.tabs, 'create', { url: redirected })
+  }
+  if (info.menuItemId === 'freedirect-reverse') {
+    const reversed = reverseUrl(url, state)
+    if (reversed) return callApi(api.tabs, 'update', tab.id, { url: reversed })
+  }
+  if (info.menuItemId === 'freedirect-reverse-new-tab') {
+    const reversed = reverseUrl(url, state)
+    if (reversed) return callApi(api.tabs, 'create', { url: reversed })
+  }
+})
+
+api.commands?.onCommand?.addListener(command => {
+  if (command === 'redirect-current') redirectCurrent()
+  if (command === 'reverse-current') reverseCurrent()
+  if (command === 'bypass-current') bypassCurrent()
+})
+
+api.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
+  ;(async () => {
+    const name = message?.name ?? message?.type ?? ''
+    if (name === 'freedirectRebuild' || name === 'rebuildRules') {
+      return { diagnostics: await rebuildRules() }
+    }
+    return { ok: true, received: message ?? null }
+  })().then(sendResponse, error => sendResponse({ error: String(error?.message ?? error) }))
+  return true
+})
+
+api.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  ;(async () => {
+    await ensureInitialized({ rebuildIfMissing: true })
+    const state = await getState()
+    switch (message?.type) {
+      case 'getState':
+        return { state, catalog: SERVICE_CATALOG, profiles: PROFILES, limitations: RESEARCHED_LIMITATIONS, permissions: await permissionState(), activeTabPermissions: await activeTabPermissionState() }
+      case 'setGlobalEnabled': {
+        state.globalEnabled = Boolean(message.enabled)
+        await saveState(state)
+        const diagnostics = await rebuildRules()
+        await updateCurrentActionIcon()
+        return { diagnostics }
+      }
+      case 'updateService': {
+        const service = state.services[message.serviceId]
+        if (!service) throw new Error('Unknown service')
+        state.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, service, message.patch)
+        await saveState(state)
+        const diagnostics = await rebuildRules()
+        await updateCurrentActionIcon()
+        return { diagnostics }
+      }
+      case 'applyProfile': {
+        applyProfile(state, message.profile)
+        await saveState(state)
+        const diagnostics = await rebuildRules()
+        await updateCurrentActionIcon()
+        return { diagnostics }
+      }
+      case 'setAllServices': {
+        for (const service of Object.values(state.services)) service.enabled = Boolean(message.enabled)
+        state.profile = 'manual'
+        await saveState(state)
+        const diagnostics = await rebuildRules()
+        await updateCurrentActionIcon()
+        return { diagnostics }
+      }
+      case 'resetState': {
+        await saveState(defaultState())
+        const diagnostics = await rebuildRules()
+        await updateCurrentActionIcon()
+        return { diagnostics }
+      }
+      case 'addCustomInstance': {
+        const config = state.services[message.serviceId]
+        if (!config) throw new Error('Unknown service')
+        const instance = normalizeInstanceOrigin(message.instance)
+        if (!instance) throw new Error('Custom instance must be an HTTPS URL')
+        const customInstances = Array.from(new Set([instance, ...(config.customInstances ?? [])]))
+        state.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, { customInstances, instance })
+        await saveState(state)
+        return { diagnostics: await rebuildRules() }
+      }
+      case 'removeCustomInstance': {
+        const config = state.services[message.serviceId]
+        if (!config) throw new Error('Unknown service')
+        const instance = normalizeInstanceOrigin(message.instance)
+        if (!instance) throw new Error('Custom instance must be an HTTPS URL')
+        const customInstances = (config.customInstances ?? []).filter(value => value !== instance)
+        const favoriteInstances = (config.favoriteInstances ?? []).filter(value => value !== instance)
+        const service = SERVICE_CATALOG[message.serviceId]
+        const frontend = config.frontend in service.frontends ? config.frontend : service.defaultFrontend
+        const patch = { customInstances, favoriteInstances }
+        if (config.instance === instance) patch.instance = service.frontends[frontend].instances[0]
+        state.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, patch)
+        await saveState(state)
+        return { diagnostics: await rebuildRules() }
+      }
+      case 'toggleFavoriteInstance': {
+        const config = state.services[message.serviceId]
+        if (!config) throw new Error('Unknown service')
+        const instance = normalizeInstanceOrigin(message.instance)
+        if (!instance) throw new Error('Favorite instance must be an HTTPS URL')
+        const favorites = new Set(config.favoriteInstances ?? [])
+        if (favorites.has(instance)) favorites.delete(instance)
+        else favorites.add(instance)
+        state.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, { favoriteInstances: Array.from(favorites) })
+        await saveState(state)
+        return { favorites: state.services[message.serviceId].favoriteInstances }
+      }
+      case 'checkInstanceHealth':
+        return { health: await checkInstanceHealth(message.serviceId, message.instance) }
+      case 'selectBestInstance':
+        return { best: await selectBestInstance(message.serviceId) }
+      case 'checkAllSelectedHealth':
+        return { health: await checkAllSelectedHealth() }
+      case 'refreshPublicInstances':
+        return { instances: await loadPublicInstances({ force: true }) }
+      case 'rebuildRules':
+        return { diagnostics: await rebuildRules() }
+      case 'getRules': {
+        const enabledRulesets = api.declarativeNetRequest?.getEnabledRulesets ? await callApi(api.declarativeNetRequest, 'getEnabledRulesets') : []
+        return { dynamicRules: await callApi(api.declarativeNetRequest, 'getDynamicRules'), sessionRules: await callApi(api.declarativeNetRequest, 'getSessionRules'), enabledRulesets, rulePreview: rulePreview(state) }
+      }
+      case 'previewRedirect':
+        return { url: applyTemplateRedirect(message.url, state) }
+      case 'diagnoseUrl':
+        return { diagnosis: diagnoseUrl(message.url, state) }
+      case 'diagnoseCurrent':
+        return { diagnosis: await diagnoseCurrent() }
+      case 'previewReverse':
+        return { url: reverseUrl(message.url, state) }
+      case 'redirectCurrent':
+        return { url: await redirectCurrent() }
+      case 'reverseCurrent':
+        return { url: await reverseCurrent() }
+      case 'originalForCurrent':
+        return { url: await originalForCurrent() }
+      case 'bypassCurrent':
+        return { url: await bypassCurrent() }
+      case 'clearBypasses':
+        return await clearBypasses()
+      case 'exportState':
+        return { exported: { format: 'freedirect-state', schemaVersion: state.schemaVersion, exportedAt: new Date().toISOString(), state } }
+      case 'importState': {
+        const importedState = message.state?.format === 'freedirect-state' ? message.state.state : message.state
+        await saveState(migrateState(importedState))
+        return { diagnostics: await rebuildRules() }
+      }
+      case 'requestAllHosts': {
+        if (!api.permissions?.request) return { granted: false, reason: 'permissions.request unavailable' }
+        const granted = await callApi(api.permissions, 'request', { origins: ['<all_urls>'] })
+        const diagnostics = granted ? await rebuildRules() : state.diagnostics
+        return { granted, permissions: await permissionState(), diagnostics }
+      }
+      case 'getPermissions':
+        return { permissions: await permissionState(), activeTabPermissions: await activeTabPermissionState() }
+      case 'getCommands':
+        return await commandState()
+      case 'nativePing':
+        return await sendNativeMessage({ type: 'ping', at: new Date().toISOString() })
+      case 'nativeCapabilities':
+        return await sendNativeMessage({ type: 'capabilities', at: new Date().toISOString() })
+      default:
+        return { error: 'Unknown message type' }
+    }
+  })().then(sendResponse, error => sendResponse({ error: String(error?.message ?? error) }))
+  return true
+})

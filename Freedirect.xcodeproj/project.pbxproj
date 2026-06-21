@@ -1,0 +1,1011 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 110;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		8626067F2FE80EDB005BA1FC /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8626067E2FE80EDB005BA1FC /* AppDelegate.swift */; };
+		862606812FE80EDB005BA1FC /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 862606802FE80EDB005BA1FC /* SceneDelegate.swift */; };
+		862606842FE80EDB005BA1FC /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 862606822FE80EDB005BA1FC /* LaunchScreen.storyboard */; };
+		862606872FE80EDB005BA1FC /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 862606852FE80EDB005BA1FC /* Main.storyboard */; };
+		862606902FE80EDB005BA1FC /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8626068F2FE80EDB005BA1FC /* AppDelegate.swift */; };
+		862606932FE80EDB005BA1FC /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 862606912FE80EDB005BA1FC /* Main.storyboard */; };
+		8626069A2FE80EDB005BA1FC /* Freedirect Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 862606992FE80EDB005BA1FC /* Freedirect Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		862606A42FE80EDB005BA1FC /* Freedirect Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 862606A32FE80EDB005BA1FC /* Freedirect Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		862606A92FE80EDB005BA1FC /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 8626066E2FE80EDB005BA1FC /* Main.html */; };
+		862606AA2FE80EDB005BA1FC /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 8626066E2FE80EDB005BA1FC /* Main.html */; };
+		862606AB2FE80EDB005BA1FC /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 862606702FE80EDB005BA1FC /* Icon.png */; };
+		862606AC2FE80EDB005BA1FC /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 862606702FE80EDB005BA1FC /* Icon.png */; };
+		862606AD2FE80EDB005BA1FC /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 862606712FE80EDB005BA1FC /* Style.css */; };
+		862606AE2FE80EDB005BA1FC /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 862606712FE80EDB005BA1FC /* Style.css */; };
+		862606AF2FE80EDB005BA1FC /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 862606722FE80EDB005BA1FC /* Script.js */; };
+		862606B02FE80EDB005BA1FC /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 862606722FE80EDB005BA1FC /* Script.js */; };
+		862606B12FE80EDB005BA1FC /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 862606732FE80EDB005BA1FC /* ViewController.swift */; };
+		862606B22FE80EDB005BA1FC /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 862606732FE80EDB005BA1FC /* ViewController.swift */; };
+		862606B32FE80EDB005BA1FC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 862606742FE80EDB005BA1FC /* Assets.xcassets */; };
+		862606B42FE80EDB005BA1FC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 862606742FE80EDB005BA1FC /* Assets.xcassets */; };
+		862606B52FE80EDB005BA1FC /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 862606762FE80EDB005BA1FC /* SafariWebExtensionHandler.swift */; };
+		862606B62FE80EDB005BA1FC /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 862606762FE80EDB005BA1FC /* SafariWebExtensionHandler.swift */; };
+		862606CE2FE80EDC005BA1FC /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 862606C82FE80EDC005BA1FC /* background.js */; };
+		862606CF2FE80EDC005BA1FC /* images in Resources */ = {isa = PBXBuildFile; fileRef = 862606C92FE80EDC005BA1FC /* images */; };
+		862606D02FE80EDC005BA1FC /* popup.html in Resources */ = {isa = PBXBuildFile; fileRef = 862606CA2FE80EDC005BA1FC /* popup.html */; };
+		862606E82FE80EDC005BA1FC /* popup.js in Resources */ = {isa = PBXBuildFile; fileRef = 862606EA2FE80EDC005BA1FC /* popup.js */; };
+		862606D12FE80EDC005BA1FC /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 862606CB2FE80EDC005BA1FC /* manifest.json */; };
+		862606EE2FE80EDC005BA1FC /* instances.json in Resources */ = {isa = PBXBuildFile; fileRef = 862606F02FE80EDC005BA1FC /* instances.json */; };
+		862606D22FE80EDC005BA1FC /* options.html in Resources */ = {isa = PBXBuildFile; fileRef = 862606CC2FE80EDC005BA1FC /* options.html */; };
+		862606EC2FE80EDC005BA1FC /* options.js in Resources */ = {isa = PBXBuildFile; fileRef = 862606EB2FE80EDC005BA1FC /* options.js */; };
+		862606D32FE80EDC005BA1FC /* blocked.html in Resources */ = {isa = PBXBuildFile; fileRef = 862606CD2FE80EDC005BA1FC /* blocked.html */; };
+		862606D42FE80EDC005BA1FC /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 862606C82FE80EDC005BA1FC /* background.js */; };
+		862606D52FE80EDC005BA1FC /* images in Resources */ = {isa = PBXBuildFile; fileRef = 862606C92FE80EDC005BA1FC /* images */; };
+		862606D62FE80EDC005BA1FC /* popup.html in Resources */ = {isa = PBXBuildFile; fileRef = 862606CA2FE80EDC005BA1FC /* popup.html */; };
+		862606E92FE80EDC005BA1FC /* popup.js in Resources */ = {isa = PBXBuildFile; fileRef = 862606EA2FE80EDC005BA1FC /* popup.js */; };
+		862606D72FE80EDC005BA1FC /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 862606CB2FE80EDC005BA1FC /* manifest.json */; };
+		862606EF2FE80EDC005BA1FC /* instances.json in Resources */ = {isa = PBXBuildFile; fileRef = 862606F02FE80EDC005BA1FC /* instances.json */; };
+		862606F22FE80EDC005BA1FC /* static_rules.json in Resources */ = {isa = PBXBuildFile; fileRef = 862606F12FE80EDC005BA1FC /* static_rules.json */; };
+		862606F32FE80EDC005BA1FC /* static_rules.json in Resources */ = {isa = PBXBuildFile; fileRef = 862606F12FE80EDC005BA1FC /* static_rules.json */; };
+		862606D82FE80EDC005BA1FC /* options.html in Resources */ = {isa = PBXBuildFile; fileRef = 862606CC2FE80EDC005BA1FC /* options.html */; };
+		862606ED2FE80EDC005BA1FC /* options.js in Resources */ = {isa = PBXBuildFile; fileRef = 862606EB2FE80EDC005BA1FC /* options.js */; };
+		862606D92FE80EDC005BA1FC /* blocked.html in Resources */ = {isa = PBXBuildFile; fileRef = 862606CD2FE80EDC005BA1FC /* blocked.html */; };
+		862606DA2FE80EDC005BA1FC /* _locales in Resources */ = {isa = PBXBuildFile; fileRef = 862606DC2FE80EDC005BA1FC /* _locales */; };
+		862606DB2FE80EDC005BA1FC /* _locales in Resources */ = {isa = PBXBuildFile; fileRef = 862606DC2FE80EDC005BA1FC /* _locales */; };
+		862606E02FE80EDC005BA1FC /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 862606E22FE80EDC005BA1FC /* Localizable.xcstrings */; };
+		862606E12FE80EDC005BA1FC /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 862606E22FE80EDC005BA1FC /* Localizable.xcstrings */; };
+		862606E52FE80EDC005BA1FC /* content-script.js in Resources */ = {isa = PBXBuildFile; fileRef = 862606E72FE80EDC005BA1FC /* content-script.js */; };
+		862606E62FE80EDC005BA1FC /* content-script.js in Resources */ = {isa = PBXBuildFile; fileRef = 862606E72FE80EDC005BA1FC /* content-script.js */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8626069B2FE80EDB005BA1FC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 862606682FE80EDB005BA1FC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 862606982FE80EDB005BA1FC;
+			remoteInfo = "Freedirect Extension (iOS)";
+		};
+		862606A52FE80EDB005BA1FC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 862606682FE80EDB005BA1FC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 862606A22FE80EDB005BA1FC;
+			remoteInfo = "Freedirect Extension (macOS)";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		862606BC2FE80EDB005BA1FC /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+				8626069A2FE80EDB005BA1FC /* Freedirect Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
+		862606C32FE80EDB005BA1FC /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+				862606A42FE80EDB005BA1FC /* Freedirect Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		8626066F2FE80EDB005BA1FC /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = Base; path = Base.lproj/Main.html; sourceTree = "<group>"; };
+		862606702FE80EDB005BA1FC /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
+		862606712FE80EDB005BA1FC /* Style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
+		862606722FE80EDB005BA1FC /* Script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Script.js; sourceTree = "<group>"; };
+		862606732FE80EDB005BA1FC /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		862606742FE80EDB005BA1FC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		862606762FE80EDB005BA1FC /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		8626067B2FE80EDB005BA1FC /* Freedirect.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Freedirect.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8626067E2FE80EDB005BA1FC /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		862606802FE80EDB005BA1FC /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		862606832FE80EDB005BA1FC /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		862606862FE80EDB005BA1FC /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		862606882FE80EDB005BA1FC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		8626068D2FE80EDB005BA1FC /* Freedirect.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Freedirect.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8626068F2FE80EDB005BA1FC /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		862606922FE80EDB005BA1FC /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		862606942FE80EDB005BA1FC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		862606992FE80EDB005BA1FC /* Freedirect Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Freedirect Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		8626069E2FE80EDB005BA1FC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		862606A32FE80EDB005BA1FC /* Freedirect Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Freedirect Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		862606A82FE80EDB005BA1FC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		862606C82FE80EDC005BA1FC /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = background.js; path = Resources/background.js; sourceTree = "<group>"; };
+		862606C92FE80EDC005BA1FC /* images */ = {isa = PBXFileReference; lastKnownFileType = folder; name = images; path = Resources/images; sourceTree = "<group>"; };
+		862606CA2FE80EDC005BA1FC /* popup.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = popup.html; path = Resources/popup.html; sourceTree = "<group>"; };
+		862606EA2FE80EDC005BA1FC /* popup.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = popup.js; path = Resources/popup.js; sourceTree = "<group>"; };
+		862606CB2FE80EDC005BA1FC /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = Resources/manifest.json; sourceTree = "<group>"; };
+		862606F02FE80EDC005BA1FC /* instances.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = instances.json; path = Resources/instances.json; sourceTree = "<group>"; };
+		862606F12FE80EDC005BA1FC /* static_rules.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = static_rules.json; path = Resources/static_rules.json; sourceTree = "<group>"; };
+		862606CC2FE80EDC005BA1FC /* options.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = options.html; path = Resources/options.html; sourceTree = "<group>"; };
+		862606EB2FE80EDC005BA1FC /* options.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = options.js; path = Resources/options.js; sourceTree = "<group>"; };
+		862606CD2FE80EDC005BA1FC /* blocked.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = blocked.html; path = Resources/blocked.html; sourceTree = "<group>"; };
+		862606DC2FE80EDC005BA1FC /* _locales */ = {isa = PBXFileReference; lastKnownFileType = folder; name = _locales; path = Resources/_locales; sourceTree = "<group>"; };
+		862606E22FE80EDC005BA1FC /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		862606E32FE80EDC005BA1FC /* Freedirect.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Freedirect.entitlements; sourceTree = "<group>"; };
+		862606E42FE80EDC005BA1FC /* Freedirect Extension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Freedirect Extension.entitlements"; sourceTree = "<group>"; };
+		862606E72FE80EDC005BA1FC /* content-script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "content-script.js"; path = "Resources/content-script.js"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		862606782FE80EDB005BA1FC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
+		8626068A2FE80EDB005BA1FC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
+		862606962FE80EDB005BA1FC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
+		862606A02FE80EDB005BA1FC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		862606672FE80EDB005BA1FC = {
+			isa = PBXGroup;
+			children = (
+				8626066C2FE80EDB005BA1FC /* Shared (App) */,
+				862606752FE80EDB005BA1FC /* Shared (Extension) */,
+				8626067D2FE80EDB005BA1FC /* iOS (App) */,
+				8626068E2FE80EDB005BA1FC /* macOS (App) */,
+				8626069D2FE80EDB005BA1FC /* iOS (Extension) */,
+				862606A72FE80EDB005BA1FC /* macOS (Extension) */,
+				8626067C2FE80EDB005BA1FC /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		8626066C2FE80EDB005BA1FC /* Shared (App) */ = {
+			isa = PBXGroup;
+			children = (
+				862606732FE80EDB005BA1FC /* ViewController.swift */,
+				862606742FE80EDB005BA1FC /* Assets.xcassets */,
+				8626066D2FE80EDB005BA1FC /* Resources */,
+			);
+			path = "Shared (App)";
+			sourceTree = "<group>";
+		};
+		8626066D2FE80EDB005BA1FC /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				8626066E2FE80EDB005BA1FC /* Main.html */,
+				862606702FE80EDB005BA1FC /* Icon.png */,
+				862606712FE80EDB005BA1FC /* Style.css */,
+				862606722FE80EDB005BA1FC /* Script.js */,
+				862606E22FE80EDC005BA1FC /* Localizable.xcstrings */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		862606752FE80EDB005BA1FC /* Shared (Extension) */ = {
+			isa = PBXGroup;
+			children = (
+				862606C72FE80EDC005BA1FC /* Resources */,
+				862606762FE80EDB005BA1FC /* SafariWebExtensionHandler.swift */,
+			);
+			path = "Shared (Extension)";
+			sourceTree = "<group>";
+		};
+		8626067C2FE80EDB005BA1FC /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				8626067B2FE80EDB005BA1FC /* Freedirect.app */,
+				8626068D2FE80EDB005BA1FC /* Freedirect.app */,
+				862606992FE80EDB005BA1FC /* Freedirect Extension.appex */,
+				862606A32FE80EDB005BA1FC /* Freedirect Extension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8626067D2FE80EDB005BA1FC /* iOS (App) */ = {
+			isa = PBXGroup;
+			children = (
+				8626067E2FE80EDB005BA1FC /* AppDelegate.swift */,
+				862606802FE80EDB005BA1FC /* SceneDelegate.swift */,
+				862606822FE80EDB005BA1FC /* LaunchScreen.storyboard */,
+				862606852FE80EDB005BA1FC /* Main.storyboard */,
+				862606882FE80EDB005BA1FC /* Info.plist */,
+			);
+			path = "iOS (App)";
+			sourceTree = "<group>";
+		};
+		8626068E2FE80EDB005BA1FC /* macOS (App) */ = {
+			isa = PBXGroup;
+			children = (
+				8626068F2FE80EDB005BA1FC /* AppDelegate.swift */,
+				862606912FE80EDB005BA1FC /* Main.storyboard */,
+				862606942FE80EDB005BA1FC /* Info.plist */,
+				862606E32FE80EDC005BA1FC /* Freedirect.entitlements */,
+			);
+			path = "macOS (App)";
+			sourceTree = "<group>";
+		};
+		8626069D2FE80EDB005BA1FC /* iOS (Extension) */ = {
+			isa = PBXGroup;
+			children = (
+				8626069E2FE80EDB005BA1FC /* Info.plist */,
+			);
+			path = "iOS (Extension)";
+			sourceTree = "<group>";
+		};
+		862606A72FE80EDB005BA1FC /* macOS (Extension) */ = {
+			isa = PBXGroup;
+			children = (
+				862606A82FE80EDB005BA1FC /* Info.plist */,
+				862606E42FE80EDC005BA1FC /* Freedirect Extension.entitlements */,
+			);
+			path = "macOS (Extension)";
+			sourceTree = "<group>";
+		};
+		862606C72FE80EDC005BA1FC /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				862606C82FE80EDC005BA1FC /* background.js */,
+				862606E72FE80EDC005BA1FC /* content-script.js */,
+				862606C92FE80EDC005BA1FC /* images */,
+				862606CA2FE80EDC005BA1FC /* popup.html */,
+				862606EA2FE80EDC005BA1FC /* popup.js */,
+				862606CB2FE80EDC005BA1FC /* manifest.json */,
+				862606F02FE80EDC005BA1FC /* instances.json */,
+				862606F12FE80EDC005BA1FC /* static_rules.json */,
+				862606CC2FE80EDC005BA1FC /* options.html */,
+				862606EB2FE80EDC005BA1FC /* options.js */,
+				862606CD2FE80EDC005BA1FC /* blocked.html */,
+				862606DC2FE80EDC005BA1FC /* _locales */,
+			);
+			name = Resources;
+			path = "Shared (Extension)";
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		8626067A2FE80EDB005BA1FC /* Freedirect (iOS) */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 862606BD2FE80EDB005BA1FC /* Build configuration list for PBXNativeTarget "Freedirect (iOS)" */;
+			buildPhases = (
+				862606772FE80EDB005BA1FC /* Sources */,
+				862606782FE80EDB005BA1FC /* Frameworks */,
+				862606792FE80EDB005BA1FC /* Resources */,
+				862606BC2FE80EDB005BA1FC /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8626069C2FE80EDB005BA1FC /* PBXTargetDependency */,
+			);
+			name = "Freedirect (iOS)";
+			productName = "Freedirect (iOS)";
+			productReference = 8626067B2FE80EDB005BA1FC /* Freedirect.app */;
+			productType = "com.apple.product-type.application";
+		};
+		8626068C2FE80EDB005BA1FC /* Freedirect (macOS) */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 862606C42FE80EDB005BA1FC /* Build configuration list for PBXNativeTarget "Freedirect (macOS)" */;
+			buildPhases = (
+				862606892FE80EDB005BA1FC /* Sources */,
+				8626068A2FE80EDB005BA1FC /* Frameworks */,
+				8626068B2FE80EDB005BA1FC /* Resources */,
+				862606C32FE80EDB005BA1FC /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				862606A62FE80EDB005BA1FC /* PBXTargetDependency */,
+			);
+			name = "Freedirect (macOS)";
+			productName = "Freedirect (macOS)";
+			productReference = 8626068D2FE80EDB005BA1FC /* Freedirect.app */;
+			productType = "com.apple.product-type.application";
+		};
+		862606982FE80EDB005BA1FC /* Freedirect Extension (iOS) */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 862606B92FE80EDB005BA1FC /* Build configuration list for PBXNativeTarget "Freedirect Extension (iOS)" */;
+			buildPhases = (
+				862606952FE80EDB005BA1FC /* Sources */,
+				862606962FE80EDB005BA1FC /* Frameworks */,
+				862606972FE80EDB005BA1FC /* Resources */,
+			);
+			buildRules = (
+			);
+			name = "Freedirect Extension (iOS)";
+			productName = "Freedirect Extension (iOS)";
+			productReference = 862606992FE80EDB005BA1FC /* Freedirect Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		862606A22FE80EDB005BA1FC /* Freedirect Extension (macOS) */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 862606C02FE80EDB005BA1FC /* Build configuration list for PBXNativeTarget "Freedirect Extension (macOS)" */;
+			buildPhases = (
+				8626069F2FE80EDB005BA1FC /* Sources */,
+				862606A02FE80EDB005BA1FC /* Frameworks */,
+				862606A12FE80EDB005BA1FC /* Resources */,
+			);
+			buildRules = (
+			);
+			name = "Freedirect Extension (macOS)";
+			productName = "Freedirect Extension (macOS)";
+			productReference = 862606A32FE80EDB005BA1FC /* Freedirect Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		862606682FE80EDB005BA1FC /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					8626067A2FE80EDB005BA1FC = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					8626068C2FE80EDB005BA1FC = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					862606982FE80EDB005BA1FC = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					862606A22FE80EDB005BA1FC = {
+						CreatedOnToolsVersion = 27.0;
+					};
+				};
+			};
+			buildConfigurationList = 8626066B2FE80EDB005BA1FC /* Build configuration list for PBXProject "Freedirect" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 862606672FE80EDB005BA1FC;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8626067C2FE80EDB005BA1FC /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				8626067A2FE80EDB005BA1FC /* Freedirect (iOS) */,
+				8626068C2FE80EDB005BA1FC /* Freedirect (macOS) */,
+				862606982FE80EDB005BA1FC /* Freedirect Extension (iOS) */,
+				862606A22FE80EDB005BA1FC /* Freedirect Extension (macOS) */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		862606792FE80EDB005BA1FC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+				862606AB2FE80EDB005BA1FC /* Icon.png in Resources */,
+				862606842FE80EDB005BA1FC /* LaunchScreen.storyboard in Resources */,
+				862606A92FE80EDB005BA1FC /* Main.html in Resources */,
+				862606AF2FE80EDB005BA1FC /* Script.js in Resources */,
+				862606E02FE80EDC005BA1FC /* Localizable.xcstrings in Resources */,
+				862606B32FE80EDB005BA1FC /* Assets.xcassets in Resources */,
+				862606872FE80EDB005BA1FC /* Main.storyboard in Resources */,
+				862606AD2FE80EDB005BA1FC /* Style.css in Resources */,
+			);
+		};
+		8626068B2FE80EDB005BA1FC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+				862606AC2FE80EDB005BA1FC /* Icon.png in Resources */,
+				862606AE2FE80EDB005BA1FC /* Style.css in Resources */,
+				862606932FE80EDB005BA1FC /* Main.storyboard in Resources */,
+				862606B02FE80EDB005BA1FC /* Script.js in Resources */,
+				862606E12FE80EDC005BA1FC /* Localizable.xcstrings in Resources */,
+				862606B42FE80EDB005BA1FC /* Assets.xcassets in Resources */,
+				862606AA2FE80EDB005BA1FC /* Main.html in Resources */,
+			);
+		};
+		862606972FE80EDB005BA1FC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+				862606D72FE80EDC005BA1FC /* manifest.json in Resources */,
+				862606EF2FE80EDC005BA1FC /* instances.json in Resources */,
+				862606F32FE80EDC005BA1FC /* static_rules.json in Resources */,
+				862606D92FE80EDC005BA1FC /* blocked.html in Resources */,
+				862606D52FE80EDC005BA1FC /* images in Resources */,
+				862606D82FE80EDC005BA1FC /* options.html in Resources */,
+				862606ED2FE80EDC005BA1FC /* options.js in Resources */,
+				862606D62FE80EDC005BA1FC /* popup.html in Resources */,
+				862606E92FE80EDC005BA1FC /* popup.js in Resources */,
+				862606D42FE80EDC005BA1FC /* background.js in Resources */,
+				862606E62FE80EDC005BA1FC /* content-script.js in Resources */,
+				862606DB2FE80EDC005BA1FC /* _locales in Resources */,
+			);
+		};
+		862606A12FE80EDB005BA1FC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+				862606D12FE80EDC005BA1FC /* manifest.json in Resources */,
+				862606EE2FE80EDC005BA1FC /* instances.json in Resources */,
+				862606F22FE80EDC005BA1FC /* static_rules.json in Resources */,
+				862606D32FE80EDC005BA1FC /* blocked.html in Resources */,
+				862606CF2FE80EDC005BA1FC /* images in Resources */,
+				862606D22FE80EDC005BA1FC /* options.html in Resources */,
+				862606EC2FE80EDC005BA1FC /* options.js in Resources */,
+				862606D02FE80EDC005BA1FC /* popup.html in Resources */,
+				862606E82FE80EDC005BA1FC /* popup.js in Resources */,
+				862606CE2FE80EDC005BA1FC /* background.js in Resources */,
+				862606E52FE80EDC005BA1FC /* content-script.js in Resources */,
+				862606DA2FE80EDC005BA1FC /* _locales in Resources */,
+			);
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		862606772FE80EDB005BA1FC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				862606B12FE80EDB005BA1FC /* ViewController.swift in Sources */,
+				8626067F2FE80EDB005BA1FC /* AppDelegate.swift in Sources */,
+				862606812FE80EDB005BA1FC /* SceneDelegate.swift in Sources */,
+			);
+		};
+		862606892FE80EDB005BA1FC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				862606B22FE80EDB005BA1FC /* ViewController.swift in Sources */,
+				862606902FE80EDB005BA1FC /* AppDelegate.swift in Sources */,
+			);
+		};
+		862606952FE80EDB005BA1FC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				862606B52FE80EDB005BA1FC /* SafariWebExtensionHandler.swift in Sources */,
+			);
+		};
+		8626069F2FE80EDB005BA1FC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				862606B62FE80EDB005BA1FC /* SafariWebExtensionHandler.swift in Sources */,
+			);
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8626069C2FE80EDB005BA1FC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 862606982FE80EDB005BA1FC /* Freedirect Extension (iOS) */;
+			targetProxy = 8626069B2FE80EDB005BA1FC /* PBXContainerItemProxy */;
+		};
+		862606A62FE80EDB005BA1FC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 862606A22FE80EDB005BA1FC /* Freedirect Extension (macOS) */;
+			targetProxy = 862606A52FE80EDB005BA1FC /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		8626066E2FE80EDB005BA1FC /* Main.html */ = {
+			isa = PBXVariantGroup;
+			children = (
+				8626066F2FE80EDB005BA1FC /* Base */,
+			);
+			name = Main.html;
+			sourceTree = "<group>";
+		};
+		862606822FE80EDB005BA1FC /* LaunchScreen.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				862606832FE80EDB005BA1FC /* Base */,
+			);
+			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+		862606852FE80EDB005BA1FC /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				862606862FE80EDB005BA1FC /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+		862606912FE80EDB005BA1FC /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				862606922FE80EDB005BA1FC /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		862606B72FE80EDB005BA1FC /* Debug configuration for PBXProject "Freedirect" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		862606B82FE80EDB005BA1FC /* Release configuration for PBXProject "Freedirect" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		862606BA2FE80EDB005BA1FC /* Debug configuration for PBXNativeTarget "Freedirect Extension (iOS)" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = DNP7DGUB7B;
+				DEVELOPMENT_TEAM = DNP7DGUB7B;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "iOS (Extension)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Freedirect Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.1;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.freedirect.Freedirect.Extension;
+				PRODUCT_NAME = "Freedirect Extension";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		862606BB2FE80EDB005BA1FC /* Release configuration for PBXNativeTarget "Freedirect Extension (iOS)" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = DNP7DGUB7B;
+				DEVELOPMENT_TEAM = DNP7DGUB7B;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "iOS (Extension)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Freedirect Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.1;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.freedirect.Freedirect.Extension;
+				PRODUCT_NAME = "Freedirect Extension";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		862606BE2FE80EDB005BA1FC /* Debug configuration for PBXNativeTarget "Freedirect (iOS)" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = DNP7DGUB7B;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "iOS (App)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Freedirect;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.1;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.freedirect.Freedirect;
+				PRODUCT_NAME = Freedirect;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		862606BF2FE80EDB005BA1FC /* Release configuration for PBXNativeTarget "Freedirect (iOS)" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = DNP7DGUB7B;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "iOS (App)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Freedirect;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.1;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.freedirect.Freedirect;
+				PRODUCT_NAME = Freedirect;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		862606C12FE80EDB005BA1FC /* Debug configuration for PBXNativeTarget "Freedirect Extension (macOS)" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "macOS (Extension)/Freedirect Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = DNP7DGUB7B;
+				DEVELOPMENT_TEAM = DNP7DGUB7B;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "macOS (Extension)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Freedirect Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0.1;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.freedirect.Freedirect.Extension;
+				PRODUCT_NAME = "Freedirect Extension";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		862606C22FE80EDB005BA1FC /* Release configuration for PBXNativeTarget "Freedirect Extension (macOS)" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "macOS (Extension)/Freedirect Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = DNP7DGUB7B;
+				DEVELOPMENT_TEAM = DNP7DGUB7B;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "macOS (Extension)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Freedirect Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0.1;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.freedirect.Freedirect.Extension;
+				PRODUCT_NAME = "Freedirect Extension";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		862606C52FE80EDB005BA1FC /* Debug configuration for PBXNativeTarget "Freedirect (macOS)" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "macOS (App)/Freedirect.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = DNP7DGUB7B;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "macOS (App)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Freedirect;
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0.1;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.freedirect.Freedirect;
+				PRODUCT_NAME = Freedirect;
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		862606C62FE80EDB005BA1FC /* Release configuration for PBXNativeTarget "Freedirect (macOS)" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "macOS (App)/Freedirect.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = DNP7DGUB7B;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "macOS (App)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Freedirect;
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0.1;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.freedirect.Freedirect;
+				PRODUCT_NAME = Freedirect;
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		8626066B2FE80EDB005BA1FC /* Build configuration list for PBXProject "Freedirect" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				862606B72FE80EDB005BA1FC /* Debug configuration for PBXProject "Freedirect" */,
+				862606B82FE80EDB005BA1FC /* Release configuration for PBXProject "Freedirect" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		862606B92FE80EDB005BA1FC /* Build configuration list for PBXNativeTarget "Freedirect Extension (iOS)" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				862606BA2FE80EDB005BA1FC /* Debug configuration for PBXNativeTarget "Freedirect Extension (iOS)" */,
+				862606BB2FE80EDB005BA1FC /* Release configuration for PBXNativeTarget "Freedirect Extension (iOS)" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		862606BD2FE80EDB005BA1FC /* Build configuration list for PBXNativeTarget "Freedirect (iOS)" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				862606BE2FE80EDB005BA1FC /* Debug configuration for PBXNativeTarget "Freedirect (iOS)" */,
+				862606BF2FE80EDB005BA1FC /* Release configuration for PBXNativeTarget "Freedirect (iOS)" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		862606C02FE80EDB005BA1FC /* Build configuration list for PBXNativeTarget "Freedirect Extension (macOS)" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				862606C12FE80EDB005BA1FC /* Debug configuration for PBXNativeTarget "Freedirect Extension (macOS)" */,
+				862606C22FE80EDB005BA1FC /* Release configuration for PBXNativeTarget "Freedirect Extension (macOS)" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		862606C42FE80EDB005BA1FC /* Build configuration list for PBXNativeTarget "Freedirect (macOS)" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				862606C52FE80EDB005BA1FC /* Debug configuration for PBXNativeTarget "Freedirect (macOS)" */,
+				862606C62FE80EDB005BA1FC /* Release configuration for PBXNativeTarget "Freedirect (macOS)" */,
+			);
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 862606682FE80EDB005BA1FC /* Project object */;
+	validationLevel = 1;
+}

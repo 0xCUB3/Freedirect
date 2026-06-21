@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Freedirect Settings</title>
+  <style>
+    :root { color-scheme: light dark; --bg: oklch(1 0 0); --surface: oklch(0.975 0.003 91.3); --elevated: oklch(0.955 0.006 91.3); --ink: oklch(0.205 0.018 255); --muted: oklch(0.46 0.018 255); --primary: oklch(0.68 0.155 87); --border: oklch(0.88 0.008 255); --error: oklch(0.55 0.18 28); --success: oklch(0.55 0.12 155); --warning: oklch(0.62 0.13 75); }
+    @media (prefers-color-scheme: dark) { :root { --bg: oklch(0.12 0 0); --surface: oklch(0.18 0.006 255); --elevated: oklch(0.23 0.01 255); --ink: oklch(0.93 0 0); --muted: oklch(0.72 0.012 255); --border: oklch(0.32 0.012 255); } }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--bg); font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { max-width: 1240px; margin: 0 auto; padding: 18px clamp(12px, 3vw, 28px) 36px; }
+    header { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: minmax(170px, 1fr) auto; gap: 12px; align-items: center; padding: 12px 0 14px; margin-bottom: 10px; background: color-mix(in oklab, var(--bg), transparent 8%); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    h1 { margin: 0; font-size: 22px; line-height: 1.15; letter-spacing: -0.01em; }
+    h2 { margin: 0 0 10px; font-size: 16px; }
+    button, select, input[type='text'], input[type='search'], textarea { border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--ink); padding: 8px 10px; font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: 0.55; }
+    button.primary { background: var(--primary); border-color: transparent; color: white; font-weight: 650; }
+    button.small { padding: 5px 8px; font-size: 12px; }
+    button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid color-mix(in oklab, var(--primary), white 45%); outline-offset: 2px; }
+    .toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; align-items: center; }
+    .filters { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(150px, 190px) minmax(150px, 210px) auto auto auto; gap: 8px; align-items: center; margin: 12px 0; }
+    .summary { display: inline-flex; min-height: 34px; align-items: center; border: 1px solid var(--border); border-radius: 999px; padding: 5px 10px; color: var(--muted); background: var(--surface); white-space: nowrap; }
+    .services { border: 1px solid var(--border); border-radius: 16px; background: var(--surface); overflow: clip; }
+    .service { display: grid; grid-template-columns: 34px minmax(180px, 1.25fr) minmax(130px, 0.7fr) minmax(220px, 1.2fr) minmax(118px, 0.55fr) auto; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--border); }
+    .service:first-child { border-top: 0; }
+    .service:hover { background: color-mix(in oklab, var(--elevated), transparent 30%); }
+    .service.disabled { opacity: 0.68; }
+    .toggle { display: grid; place-items: center; }
+    .name { min-width: 0; }
+    .name strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hosts { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .service select { min-width: 0; }
+    .row-actions { display: flex; gap: 6px; justify-content: flex-end; align-items: center; white-space: nowrap; }
+    .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 7px; background: var(--elevated); color: var(--muted); font-size: 12px; }
+    .ok { color: var(--success); } .bad { color: var(--error); } .warn { color: var(--warning); }
+    details { margin-top: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 12px; }
+    summary { cursor: pointer; font-weight: 650; }
+    .details-grid { display: grid; gap: 12px; margin-top: 12px; }
+    .details-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .muted { color: var(--muted); }
+    ul { margin: 8px 0 0; padding-left: 18px; }
+    pre, textarea { width: 100%; min-height: 150px; background: var(--bg); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; overflow: auto; }
+    @media (max-width: 940px) { header, .filters, .service { grid-template-columns: 1fr; } .toolbar, .row-actions { justify-content: flex-start; } .toggle { place-items: start; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 data-i18n="optionsTitle">Freedirect Settings</h1>
+    <div class="toolbar">
+      <button id="refreshInstances" data-i18n="refreshInstances">Update instance lists</button>
+      <button id="rebuild" class="primary" data-i18n="rebuildRules">Rebuild rules</button>
+    </div>
+  </header>
+
+  <section aria-labelledby="servicesHeading">
+    <h2 id="servicesHeading" data-i18n="services">Services</h2>
+    <div class="filters">
+      <input id="serviceSearch" type="search" data-i18n-placeholder="searchServices" data-i18n-aria-label="searchServices" placeholder="Search services" aria-label="Search services">
+      <select id="serviceFilter" data-i18n-aria-label="filterServices" aria-label="Filter services">
+        <option value="all" data-i18n="allServices">All services</option>
+        <option value="enabled" data-i18n="enabledServices">Enabled services</option>
+        <option value="disabled" data-i18n="disabledServices">Disabled services</option>
+      </select>
+      <select id="profile" data-i18n-aria-label="profile" aria-label="Profile"></select>
+      <button id="enableAll" data-i18n="enableAll">Enable all</button>
+      <button id="disableAll" data-i18n="disableAll">Disable all</button>
+      <button id="resetDefaults" data-i18n="resetDefaults">Reset defaults</button>
+    </div>
+    <div id="serviceSummary" class="summary" aria-live="polite">—</div>
+    <div id="services" class="services" aria-live="polite"></div>
+  </section>
+
+  <details open>
+    <summary data-i18n="diagnostics">Diagnostics</summary>
+    <div class="details-grid">
+      <p id="diag" class="muted" aria-live="polite">Loading…</p>
+      <div class="details-row">
+        <button id="checkAll" data-i18n="checkSelectedInstances">Check selected instances</button>
+        <button id="showCommands" data-i18n="showCommands">Show commands</button>
+        <button id="clearBypasses" data-i18n="clearBypasses">Clear bypasses</button>
+      </div>
+      <ul id="commands" class="muted" aria-live="polite"></ul>
+      <ul id="bypasses" class="muted" aria-live="polite"></ul>
+    </div>
+  </details>
+
+  <details>
+    <summary data-i18n="urlDebugger">URL debugger</summary>
+    <div class="details-grid">
+      <div class="details-row">
+        <input id="debugUrl" type="text" data-i18n-placeholder="testUrlPlaceholder" data-i18n-aria-label="testUrlLabel" placeholder="Paste a service or frontend URL" aria-label="URL to debug">
+        <button id="debugRedirect" data-i18n="previewRedirect">Preview redirect</button>
+        <button id="debugReverse" data-i18n="previewOriginal">Preview original</button>
+      </div>
+      <p id="debugResult" class="muted" aria-live="polite">No URL checked.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary data-i18n="rulePreview">Rule preview</summary>
+    <div class="details-grid">
+      <button id="previewRules" data-i18n="showGeneratedRules">Show generated rules</button>
+      <pre id="rulesPreview" aria-live="polite">Rule preview not loaded.</pre>
+    </div>
+  </details>
+
+  <details>
+    <summary data-i18n="backup">Backup</summary>
+    <div class="details-grid">
+      <div class="details-row"><button id="export" data-i18n="export">Export</button><button id="import" data-i18n="import">Import</button></div>
+      <textarea id="backup" spellcheck="false" data-i18n-aria-label="backupState" aria-label="Backup JSON" placeholder="Exported JSON appears here. Paste JSON and press Import to restore."></textarea>
+    </div>
+  </details>
+</main>
+<script src="options.js"></script>
+</body>
+</html>
