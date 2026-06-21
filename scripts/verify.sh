@@ -41,6 +41,11 @@ assert 'id="status"' in popup and 'aria-live="polite"' in popup
 for required in ['serviceSearch', 'serviceFilter', 'debugUrl', 'backup']:
     assert required in options, required
 assert options.count('aria-live="polite"') >= 5
+for icon in Path('Shared (App)/Assets.xcassets/AppIcon.appiconset').glob('*.png'):
+    data = icon.read_bytes()
+    assert data[:8] == b'\x89PNG\r\n\x1a\n', icon
+    color_type = data[25]
+    assert color_type not in (4, 6), f'{icon} has an alpha channel'
 print('manifest ok')
 PY
 
