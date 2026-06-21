@@ -29,6 +29,7 @@ const TOOLBAR_ICONS = {
 }
 let bundledInstancesLoaded = false
 const tabLastGoodUrls = new Map()
+const recentNavigationRedirects = new Map()
 const NATIVE_APP_ID = 'app.freedirect.Freedirect'
 const PROMISE_STYLE_API = Boolean(globalThis.browser) && api === globalThis.browser
 
@@ -944,6 +945,20 @@ async function openRedirectInTab(tabId, redirected, previousUrl = null) {
   if (redirected.startsWith('freetube://')) finishAppProtocolRedirect(tabId, previousUrl)
 }
 
+async function redirectNavigationUrl(tabId, url, { rescue = false } = {}) {
+  if (tabId === undefined || tabId < 0 || !/^https?:/.test(url || '')) return null
+  const state = await getState()
+  const redirected = applyTemplateRedirect(url, state)
+  if (!redirected || redirected === url) return null
+  const key = `${tabId}:${url}`
+  const previousAttempt = recentNavigationRedirects.get(key) || 0
+  if (!rescue && Date.now() - previousAttempt < 1500) return redirected
+  recentNavigationRedirects.set(key, Date.now())
+  if (recentNavigationRedirects.size > 80) recentNavigationRedirects.clear()
+  await openRedirectInTab(tabId, redirected, tabLastGoodUrls.get(tabId))
+  return redirected
+}
+
 async function redirectCurrent() {
   const tab = await activeTab()
   if (!tab?.url) return null
@@ -1100,17 +1115,18 @@ api.tabs?.onActivated?.addListener(() => { updateCurrentActionIcon() })
 api.tabs?.onUpdated?.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'loading' || changeInfo.url || tab?.active) updateActionIconForTab(tab)
   try {
+    if (changeInfo.url) await redirectNavigationUrl(tabId, changeInfo.url)
     const state = await getState()
     if (tab?.url && shouldRememberTabUrl(tab.url, state)) tabLastGoodUrls.set(tabId, tab.url)
   } catch {}
 })
 api.webNavigation?.onBeforeNavigate?.addListener(async details => {
-  if (details.frameId !== 0 || !details.tabId || !/^https?:/.test(details.url || '')) return
-  try {
-    const state = await getState()
-    const redirected = applyTemplateRedirect(details.url, state)
-    if (redirected && redirected !== details.url) await openRedirectInTab(details.tabId, redirected, tabLastGoodUrls.get(details.tabId))
-  } catch {}
+  if (details.frameId !== 0 || details.tabId === undefined || !/^https?:/.test(details.url || '')) return
+  try { await redirectNavigationUrl(details.tabId, details.url) } catch {}
+})
+api.webNavigation?.onErrorOccurred?.addListener(async details => {
+  if (details.frameId !== 0 || details.tabId === undefined || !/^https?:/.test(details.url || '')) return
+  try { await redirectNavigationUrl(details.tabId, details.url, { rescue: true }) } catch {}
 })
 
 api.contextMenus?.onClicked?.addListener(async (info, tab) => {
