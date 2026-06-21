@@ -13,6 +13,7 @@
 ![Platform](https://img.shields.io/badge/macOS_26+_|_iOS_26+_|_iPadOS_26+-gray?style=flat&logo=apple&logoColor=white)
 ![Safari](https://img.shields.io/badge/Safari-Web_Extension-gray?style=flat&logo=safari&logoColor=white)
 ![Status](https://img.shields.io/badge/status-work_in_progress-gray?style=flat)
+![License](https://img.shields.io/badge/GPL--3.0-gray?style=flat&label=license)
 
 </div>
 
@@ -88,6 +89,13 @@ Safari users do not have the same redirector ecosystem that Chromium and Firefox
 </tr>
 </table>
 
+<br>
+
+---
+
+<br>
+
+<div align="center">
 
 ## Documentation
 
@@ -107,3 +115,27 @@ Safari users do not have the same redirector ecosystem that Chromium and Firefox
 <br>
 
 <div align="center">
+
+## Credits
+
+</div>
+
+Freedirect is made by me, [0xCUB3](https://github.com/0xCUB3).
+
+Big thanks to [LibRedirect](https://github.com/libredirect/browser_extension). Freedirect is not a copy of LibRedirect, but it is very clearly inspired by it: the service coverage, frontend choices, and general “send this site somewhere better” idea come from that ecosystem. If you use Firefox or Chromium, LibRedirect is still the project you should probably try first.
+
+<br>
+
+---
+
+<br>
+
+<div align="center">
+
+## License
+
+</div>
+
+Freedirect is licensed under the [GNU General Public License v3.0](LICENSE).
+
+That matches LibRedirect and keeps the same basic spirit: you can study it, change it, share it, and ship your changes, as long as the same freedoms stay attached.
