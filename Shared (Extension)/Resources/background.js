@@ -541,12 +541,9 @@ function selectedInstance(serviceId, state) {
   return config.instance || candidates[0]
 }
 
-function jsSubstitution(instance, path) {
-  return instance.endsWith('://') ? instance + path : instance.replace(/\/$/, '') + path
-}
-
-function dnrSubstitution(instance, path) {
-  return instance.endsWith('://') ? instance + path.replaceAll('$', '\\') : instance.replace(/\/$/, '') + path.replaceAll('$', '\\')
+function templateSubstitution(instance, path, { dnr = false } = {}) {
+  const base = instance.endsWith('://') ? instance : instance.replace(/\/$/, '')
+  return base + (dnr ? path.replaceAll('$', '\\') : path)
 }
 
 function ruleRecords(state) {
@@ -568,7 +565,7 @@ function ruleRecords(state) {
         priority: template.priority ?? 10,
         action: {
           type: 'redirect',
-          redirect: { regexSubstitution: dnrSubstitution(instance, template.path) }
+          redirect: { regexSubstitution: templateSubstitution(instance, template.path, { dnr: true }) }
         },
         condition: {
           regexFilter: template.source,
@@ -583,7 +580,7 @@ function ruleRecords(state) {
         frontendName: service.frontends[frontendId].name,
         instance,
         source: template.source,
-        substitution: dnrSubstitution(instance, template.path),
+        substitution: templateSubstitution(instance, template.path, { dnr: true }),
         rule
       })
     }
@@ -593,26 +590,19 @@ function ruleRecords(state) {
 
 function staticOverrideRules(state) {
   const rules = []
-  const youtubeFrontend = state.services.youtube?.frontend
-  const youtubeUsesApp = SERVICE_CATALOG.youtube.frontends[youtubeFrontend]?.appProtocol
-  if (!state.globalEnabled || !state.services.youtube?.enabled || youtubeUsesApp) {
-    rules.push(
-      { id: STATIC_OVERRIDE_RULE_ID_BASE + 1, priority: 100, action: { type: 'allow' }, condition: { regexFilter: '^https?://(www\\.|m\\.)?youtube\\.com/watch\\?v=([^?&#/]+)(.*)', resourceTypes: ['main_frame'] } },
-      { id: STATIC_OVERRIDE_RULE_ID_BASE + 2, priority: 100, action: { type: 'allow' }, condition: { regexFilter: '^https?://youtu\\.be/([^?&#/]+)(.*)', resourceTypes: ['main_frame'] } },
-      { id: STATIC_OVERRIDE_RULE_ID_BASE + 3, priority: 100, action: { type: 'allow' }, condition: { regexFilter: '^https?://(www\\.|m\\.)?youtube\\.com/(.*)', resourceTypes: ['main_frame'] } },
-      { id: STATIC_OVERRIDE_RULE_ID_BASE + 4, priority: 100, action: { type: 'allow' }, condition: { regexFilter: '^https?://(www\\.)?youtube-nocookie\\.com/embed/([^?&#/]+)(.*)', resourceTypes: ['main_frame'] } }
-    )
-  }
-  if (!state.globalEnabled || !state.services.reddit?.enabled) {
-    rules.push(
-      { id: STATIC_OVERRIDE_RULE_ID_BASE + 5, priority: 100, action: { type: 'allow' }, condition: { regexFilter: '^https?://(www\\.|old\\.|new\\.)?reddit\\.com/(.*)', resourceTypes: ['main_frame'] } },
-      { id: STATIC_OVERRIDE_RULE_ID_BASE + 6, priority: 100, action: { type: 'allow' }, condition: { regexFilter: '^https?://redd\\.it/(.*)', resourceTypes: ['main_frame'] } }
-    )
-  }
-  if (!state.globalEnabled || !state.services.twitter?.enabled) {
-    rules.push(
-      { id: STATIC_OVERRIDE_RULE_ID_BASE + 7, priority: 100, action: { type: 'allow' }, condition: { regexFilter: '^https?://(www\\.|mobile\\.)?(twitter|x)\\.com/(.*)', resourceTypes: ['main_frame'] } }
-    )
+  const offsets = { youtube: 1, reddit: 5, twitter: 7 }
+  for (const serviceId of Object.keys(offsets)) {
+    const service = SERVICE_CATALOG[serviceId]
+    const config = state.services[serviceId]
+    const frontend = service.frontends[config?.frontend]
+    if (state.globalEnabled && config?.enabled && !frontend?.appProtocol) continue
+    const templates = serviceId === 'youtube' ? service.frontends.invidious.rules : service.rules
+    templates.forEach((template, index) => rules.push({
+      id: STATIC_OVERRIDE_RULE_ID_BASE + offsets[serviceId] + index,
+      priority: 100,
+      action: { type: 'allow' },
+      condition: { regexFilter: template.source, resourceTypes: ['main_frame'] }
+    }))
   }
   return rules
 }
@@ -698,7 +688,7 @@ function diagnoseUrl(urlString, state) {
           serviceName: service.name,
           frontendName: service.frontends[frontendId].name,
           instance,
-          redirectUrl: url.href.replace(regex, jsSubstitution(instance, template.path)),
+          redirectUrl: url.href.replace(regex, templateSubstitution(instance, template.path)),
           reverseUrl: reversed,
           reason: 'matched'
         }
@@ -1104,11 +1094,6 @@ api.runtime.onInstalled.addListener(async () => {
 
 api.runtime.onStartup?.addListener(async () => {
   await ensureInitialized({ rebuildIfMissing: true })
-})
-
-api.storage.onChanged?.addListener((changes, area) => {
-  // Mutating diagnostics during rule rebuild also writes storage. Rebuilds are
-  // therefore triggered by explicit settings/actions, not every local write.
 })
 
 api.tabs?.onActivated?.addListener(() => { updateCurrentActionIcon() })

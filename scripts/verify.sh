@@ -62,6 +62,9 @@ for name in ['Freedirect (iOS)', 'Freedirect (macOS)', 'Freedirect Extension (iO
 assert 'IPHONEOS_DEPLOYMENT_TARGET = 26.0;' in pbx
 assert 'MACOSX_DEPLOYMENT_TARGET = 26.0;' in pbx
 assert 'TARGETED_DEVICE_FAMILY = "1,2";' in pbx
+macos_app_info = Path('macOS (App)/Info.plist').read_text()
+assert '<key>LSApplicationCategoryType</key>' in macos_app_info
+assert '<string>public.app-category.utilities</string>' in macos_app_info
 assert 'com.apple.Safari.web-extension' in Path('iOS (Extension)/Info.plist').read_text()
 assert 'com.apple.Safari.web-extension' in Path('macOS (Extension)/Info.plist').read_text()
 assert '_locales in Resources' in pbx
