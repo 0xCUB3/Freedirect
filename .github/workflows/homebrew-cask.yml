@@ -111,20 +111,25 @@ jobs:
           key_path="${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
           echo "${APPLE_API_KEY_P8_B64}" | base64 --decode > "${key_path}"
 
+          set +e
           notary_output=$(xcrun notarytool submit "${dmg}" \
             --key "${key_path}" \
             --key-id "${APPLE_API_KEY_ID}" \
             --issuer "${APPLE_API_ISSUER_ID}" \
             --wait 2>&1)
+          notary_status=$?
+          set -e
           echo "${notary_output}"
 
-          uuid=$(echo "${notary_output}" | grep "  id:" | head -1 | awk '{print $2}')
-          if echo "${notary_output}" | grep -q "status: Invalid"; then
-            echo "Notarization failed. Fetching full log for UUID: ${uuid}"
-            xcrun notarytool log "${uuid}" \
-              --key "${key_path}" \
-              --key-id "${APPLE_API_KEY_ID}" \
-              --issuer "${APPLE_API_ISSUER_ID}"
+          uuid=$(echo "${notary_output}" | grep "  id:" | head -1 | awk '{print $2}' || true)
+          if [[ ${notary_status} -ne 0 ]] || echo "${notary_output}" | grep -q "status: Invalid"; then
+            if [[ -n "${uuid}" ]]; then
+              echo "Notarization failed. Fetching full log for UUID: ${uuid}"
+              xcrun notarytool log "${uuid}" \
+                --key "${key_path}" \
+                --key-id "${APPLE_API_KEY_ID}" \
+                --issuer "${APPLE_API_ISSUER_ID}" || true
+            fi
             exit 1
           fi
 
