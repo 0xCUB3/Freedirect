@@ -88,41 +88,6 @@ Safari users do not have the same redirector ecosystem that Chromium and Firefox
 </tr>
 </table>
 
-<br>
-
----
-
-<br>
-
-<div align="center">
-  
-## Requirements
-
-</div>
-
-- macOS/iOS/iPadOS 26+
-
-<br>
-
----
-
-<br>
-
-<div align="center">
-
-### Notes on blocking YouTube
-
-</div>
-
-If you use FreeTube, do not DNS-block every YouTube domain. FreeTube’s local API still needs YouTube extractor/media endpoints. A practical setup is to let DNS resolve YouTube and use browser/app rules to stop Safari from opening YouTube pages.
-
-<br>
-
----
-
-<br>
-
-<div align="center">
 
 ## Documentation
 
