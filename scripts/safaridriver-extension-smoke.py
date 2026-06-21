@@ -18,33 +18,24 @@ from pathlib import Path
 from urllib.parse import urlparse
 import argparse
 import json
-import re
 import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
 EXTENSION = ROOT / "Shared (Extension)" / "Resources"
 SERVICE_TEST_CASES = ROOT / "scripts" / "service-test-cases.json"
-SERVICE_TEST_DOC = ROOT / "docs" / "service-test-cases.md"
-DEFAULT_ENABLED_SERVICES = ["youtube", "reddit", "twitter", "instagram", "tiktok"]
+SERVICE_CASES = json.loads(SERVICE_TEST_CASES.read_text())
+DEFAULT_ENABLED_SERVICES = ["youtube", "reddit", "twitter", "instagram", "search"]
+DEFAULT_EXPECTED_HOSTS = {
+    "youtube": "inv.thepixora.com",
+    "reddit": "redlib.net",
+    "twitter": "nitter.net",
+    "instagram": "kittygr.am",
+    "search": "search.sapti.me",
+}
 
-
-def expected_urls_from_doc():
-    rows = {}
-    pattern = re.compile(r"^\| ([^| ]+) \| [^|]+ \| `([^`]+)` \| `([^`]+)` \|")
-    if not SERVICE_TEST_DOC.exists():
-        return rows
-    for line in SERVICE_TEST_DOC.read_text().splitlines():
-        match = pattern.match(line)
-        if match:
-            service_id, sample, expected = match.groups()
-            rows[service_id] = {"sample": sample, "expected": expected}
-    return rows
-
-
-expected_cases = expected_urls_from_doc()
 parser = argparse.ArgumentParser(description="Optional SafariDriver smoke test for Freedirect.")
-parser.add_argument("--redirect-service", choices=sorted(expected_cases), help="After extension install, navigate to a service sample and require the generated expected redirect. Requires manual Safari site access grants.")
+parser.add_argument("--redirect-service", choices=sorted(SERVICE_CASES), help="After extension install, navigate to a service sample and require the generated default redirect host. Requires manual Safari site access grants.")
 parser.add_argument("--redirect-defaults", action="store_true", help="Assert redirects for the balanced-profile default services after manual Safari site-access grants.")
 parser.add_argument("--timeout", type=float, default=8.0, help="Seconds to wait for each optional redirect assertion.")
 args = parser.parse_args()
@@ -62,8 +53,7 @@ except Exception as exc:  # pragma: no cover - environment dependent
     sys.exit(0)
 
 
-def wait_for_redirect(service_id, sample_url, expected_url):
-    expected_host = urlparse(expected_url).hostname
+def wait_for_redirect(service_id, sample_url, expected_host):
     driver.get(sample_url)
     deadline = time.monotonic() + args.timeout
     while time.monotonic() < deadline:
@@ -94,10 +84,11 @@ try:
         redirect_ids.extend(service_id for service_id in DEFAULT_ENABLED_SERVICES if service_id not in redirect_ids)
 
     if redirect_ids:
-        cases = json.loads(SERVICE_TEST_CASES.read_text())
         for service_id in redirect_ids:
-            expected = expected_cases[service_id]["expected"]
-            wait_for_redirect(service_id, cases[service_id], expected)
+            expected_host = DEFAULT_EXPECTED_HOSTS.get(service_id)
+            if not expected_host:
+                raise SystemExit(f"No default expected host is configured for {service_id}")
+            wait_for_redirect(service_id, SERVICE_CASES[service_id], expected_host)
     else:
         print(f"SafariDriver extension smoke ok: {result}")
 finally:

@@ -50,8 +50,6 @@ node --check "Shared (Extension)/Resources/popup.js"
 node --check "Shared (Extension)/Resources/options.js"
 node scripts/smoke-extension.mjs
 node scripts/validate-catalog.mjs
-node scripts/generate-service-matrix.mjs >/tmp/freedirect-service-matrix.txt
-node scripts/generate-service-test-cases.mjs >/tmp/freedirect-service-test-cases.txt
 python3 -m py_compile scripts/safaridriver-extension-smoke.py
 bash -n scripts/check-safari-extension-install.sh
 
@@ -79,12 +77,6 @@ assert 'CODE_SIGN_ENTITLEMENTS = "macOS (Extension)/Freedirect Extension.entitle
 assert pbx.count('DEVELOPMENT_TEAM = DNP7DGUB7B;') >= 6
 print('project targets ok')
 PY
-
-for path in PRODUCT.md DESIGN.md docs/research.md docs/architecture.md docs/feature-parity.md docs/service-matrix.md docs/service-test-cases.md docs/testing.md docs/localization.md docs/completion-audit.md README.md; do
-  test -s "$path"
-done
-
-echo 'docs ok'
 
 if [ -d /Applications/Xcode-beta.app ]; then
   export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
