@@ -4,7 +4,7 @@
 
 # Freedirect
 
-**A Safari redirector for privacy-friendly frontends.**
+**Redirect Safari links to alternative frontends.**
 
 ![Platform](https://img.shields.io/badge/macOS_26+_|_iOS_26+_|_iPadOS_26+-gray?style=flat&logo=apple&logoColor=white)
 ![Safari](https://img.shields.io/badge/Safari-Web_Extension-gray?style=flat&logo=safari&logoColor=white)
@@ -14,44 +14,56 @@
 
 </div>
 
-Freedirect redirects links from large platforms to alternative frontends in Safari. Think YouTube to Invidious or FreeTube, Reddit to Redlib, X/Twitter to Nitter-style instances, Medium to Scribe, Wikipedia to Wikiless, and similar redirects.
+Freedirect is a Safari Web Extension for macOS, iOS, and iPadOS. It rewrites supported links before Safari opens them, sending the browser from large platforms to configured alternative frontends.
 
-The native app is intentionally minimal. Redirect settings live in the Safari extension UI, not in a duplicated native settings screen.
+Examples:
 
-## What it does
+- YouTube → Invidious, Piped, or FreeTube
+- Reddit → Redlib
+- X/Twitter → Nitter-compatible frontends
+- Medium → Scribe or Freedium
+- Wikipedia → Wikiless
+- IMDb → libremdb
+- Fandom → BreezeWiki
 
-- Redirects supported service URLs to privacy-friendlier frontends.
-- Uses Safari Declarative Net Request where possible.
-- Falls back to early navigation handling for Safari edge cases, including DNS-blocked original domains.
-- Supports custom instances, pinned instances, rotating instances, health checks, and JSON backup/import.
-- Supports FreeTube app redirects through `freetube://`.
+The native app only exists to contain and enable the Safari extension. All redirect configuration is handled inside the extension settings page.
+
+## Features
+
+- Per-service enable/disable controls
+- Frontend and instance selection
+- Custom, pinned, and rotating instances
+- Instance health checks and best-instance selection
+- JSON backup and import
+- Temporary bypass rules
+- URL debugger and generated-rule preview
+- FreeTube app redirects through `freetube://`
+- Early navigation fallback for cases where DNS blocking prevents the original page from loading
 
 ## Install
-
-From Homebrew:
 
 ```sh
 brew tap 0xcub3/freedirect
 brew install --cask freedirect
 ```
 
-Or download the DMG from the latest GitHub release.
+A DMG is also available from GitHub Releases.
 
-## Current state
+## Notes
 
-Freedirect is early software. Public alternative frontends break often, and Safari extension behavior differs across macOS/iOS releases. Some services are intentionally conservative or disabled by default when public frontends are unreliable.
+Freedirect depends on public alternative frontends, and those frontends can be unreliable. Services with unstable public frontends may be disabled by default or marked conservatively in the settings UI.
 
-If you use FreeTube, do not DNS-block every YouTube-related domain. FreeTube still needs access to YouTube extractor/media domains even if Safari never opens the YouTube page.
+If you use FreeTube, do not block every YouTube-related domain at DNS level. FreeTube still needs access to YouTube API and media domains to load videos.
 
 ## Development
 
-Technical notes, architecture, build commands, and release details live in [`TECHNICAL.md`](TECHNICAL.md).
+Build notes and implementation details are in [`TECHNICAL.md`](TECHNICAL.md).
 
 ## Credits
 
-Made by [0xCUB3](https://github.com/0xCUB3).
+Created by [0xCUB3](https://github.com/0xCUB3).
 
-Freedirect is inspired by [LibRedirect](https://github.com/libredirect/browser_extension). If you use Firefox or Chromium, LibRedirect is still the project to try first.
+Freedirect is inspired by [LibRedirect](https://github.com/libredirect/browser_extension). If you use Firefox or Chromium, LibRedirect is the more mature project.
 
 ## License
 
