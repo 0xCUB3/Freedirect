@@ -12,4 +12,4 @@ Suggested Xcode Cloud setup:
 1. Create a new workflow for `Freedirect.xcodeproj` in Xcode or App Store Connect.
 2. Use the shared scheme you want to build, usually `Freedirect (iOS)` for App Store/TestFlight or `Freedirect (macOS)` for macOS validation.
 3. Configure signing in the Apple Developer portal/App Store Connect.
-4. Keep GitHub DMG/Homebrew releases in GitHub Actions; Xcode Cloud is better suited for App Store/TestFlight builds.
+4. Use Xcode Cloud for App Store/TestFlight archives. DMG/Homebrew releases are handled manually.

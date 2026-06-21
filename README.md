@@ -109,8 +109,6 @@ brew tap 0xcub3/freedirect
 brew install --cask freedirect
 ```
 
-The Homebrew release flow is documented in [`docs/HOMEBREW.md`](docs/HOMEBREW.md).
-
 <br>
 
 ---
@@ -129,8 +127,7 @@ The Homebrew release flow is documented in [`docs/HOMEBREW.md`](docs/HOMEBREW.md
 - [`docs/service-matrix.md`](docs/service-matrix.md) — generated service/frontend matrix
 - [`docs/service-test-cases.md`](docs/service-test-cases.md) — manual runtime checklist
 - [`docs/testing.md`](docs/testing.md) — verification and Safari testing notes
-- [`docs/HOMEBREW.md`](docs/HOMEBREW.md) — DMG/Homebrew release flow
-- [`docs/XCODE_CLOUD.md`](docs/XCODE_CLOUD.md) — what can and cannot be automated for Xcode Cloud
+- [`docs/XCODE_CLOUD.md`](docs/XCODE_CLOUD.md) — App Store/TestFlight workflow notes
 
 <br>
 
