@@ -89,6 +89,28 @@ Safari users do not have the same redirector ecosystem that Chromium and Firefox
 </tr>
 </table>
 
+
+<br>
+
+---
+
+<br>
+
+<div align="center">
+
+## Install with Homebrew
+
+</div>
+
+Once a signed release DMG is published, Freedirect can be installed from the tap:
+
+```sh
+brew tap 0xcub3/freedirect
+brew install --cask freedirect
+```
+
+The Homebrew release flow is documented in [`docs/HOMEBREW.md`](docs/HOMEBREW.md).
+
 <br>
 
 ---
@@ -107,6 +129,8 @@ Safari users do not have the same redirector ecosystem that Chromium and Firefox
 - [`docs/service-matrix.md`](docs/service-matrix.md) — generated service/frontend matrix
 - [`docs/service-test-cases.md`](docs/service-test-cases.md) — manual runtime checklist
 - [`docs/testing.md`](docs/testing.md) — verification and Safari testing notes
+- [`docs/HOMEBREW.md`](docs/HOMEBREW.md) — DMG/Homebrew release flow
+- [`docs/XCODE_CLOUD.md`](docs/XCODE_CLOUD.md) — what can and cannot be automated for Xcode Cloud
 
 <br>
 
@@ -122,7 +146,7 @@ Safari users do not have the same redirector ecosystem that Chromium and Firefox
 
 Freedirect is made by me, [0xCUB3](https://github.com/0xCUB3).
 
-Big thanks to [LibRedirect](https://github.com/libredirect/browser_extension) for inspiring this project. The “send this site somewhere better” idea come from that ecosystem. If you use Firefox or Chromium, LibRedirect is still the project you should probably try first.
+Big thanks to [LibRedirect](https://github.com/libredirect/browser_extension) for inspiring this project. The “send this site somewhere better” idea comes from that ecosystem. If you use Firefox or Chromium, LibRedirect is still the project you should probably try first.
 
 <br>
 

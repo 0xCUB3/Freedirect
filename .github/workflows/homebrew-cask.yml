@@ -1,0 +1,192 @@
+name: homebrew-cask
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to publish to, for example v0.1.0"
+        required: false
+        type: string
+      version:
+        description: "DMG/cask version override, for example 0.1.0"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Extract version
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.release_tag }}" ]]; then
+            TAG="${{ inputs.release_tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${TAG#v}"
+          fi
+
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+
+      - name: Import Developer ID certificate
+        env:
+          MACOS_CERT_P12_B64: ${{ secrets.MACOS_CERT_P12_B64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${MACOS_CERT_P12_B64:-}" ]]; then
+            echo "Missing secret: MACOS_CERT_P12_B64" >&2
+            exit 1
+          fi
+          if [[ -z "${MACOS_CERT_PASSWORD:-}" ]]; then
+            echo "Missing secret: MACOS_CERT_PASSWORD" >&2
+            exit 1
+          fi
+
+          KEYCHAIN_PATH="${RUNNER_TEMP}/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+
+          echo "${MACOS_CERT_P12_B64}" | base64 --decode > "${RUNNER_TEMP}/cert.p12"
+
+          security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
+          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+          security list-keychains -d user -s "${KEYCHAIN_PATH}"
+          security default-keychain -s "${KEYCHAIN_PATH}"
+
+          security import "${RUNNER_TEMP}/cert.p12" -k "${KEYCHAIN_PATH}" -P "${MACOS_CERT_PASSWORD}" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+
+      - name: Install provisioning profiles
+        env:
+          MACOS_PROFILE_APP_B64: ${{ secrets.MACOS_PROFILE_APP_B64 }}
+          MACOS_PROFILE_EXTENSION_B64: ${{ secrets.MACOS_PROFILE_EXTENSION_B64 }}
+        run: |
+          set -euo pipefail
+          PP_DIR=~/Library/MobileDevice/Provisioning\ Profiles
+          mkdir -p "${PP_DIR}"
+          if [[ -n "${MACOS_PROFILE_APP_B64:-}" ]]; then
+            echo "${MACOS_PROFILE_APP_B64}" | base64 --decode > "${PP_DIR}/freedirect-app.provisionprofile"
+          fi
+          if [[ -n "${MACOS_PROFILE_EXTENSION_B64:-}" ]]; then
+            echo "${MACOS_PROFILE_EXTENSION_B64}" | base64 --decode > "${PP_DIR}/freedirect-extension.provisionprofile"
+          fi
+
+      - name: Build DMG
+        env:
+          SIGNING_IDENTITY: "Developer ID Application: Alexander Skula (DNP7DGUB7B)"
+          TEAM_ID: "DNP7DGUB7B"
+          VERSION: ${{ env.VERSION }}
+        run: bash scripts/build-dmg.sh
+
+      - name: Notarize and staple DMG
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_P8_B64: ${{ secrets.APPLE_API_KEY_P8_B64 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${APPLE_API_KEY_ID:-}" || -z "${APPLE_API_ISSUER_ID:-}" || -z "${APPLE_API_KEY_P8_B64:-}" ]]; then
+            echo "Missing notarization secret" >&2
+            exit 1
+          fi
+
+          dmg="build/homebrew/Freedirect-${VERSION}.dmg"
+          key_path="${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
+          echo "${APPLE_API_KEY_P8_B64}" | base64 --decode > "${key_path}"
+
+          notary_output=$(xcrun notarytool submit "${dmg}" \
+            --key "${key_path}" \
+            --key-id "${APPLE_API_KEY_ID}" \
+            --issuer "${APPLE_API_ISSUER_ID}" \
+            --wait 2>&1)
+          echo "${notary_output}"
+
+          uuid=$(echo "${notary_output}" | grep "  id:" | head -1 | awk '{print $2}')
+          if echo "${notary_output}" | grep -q "status: Invalid"; then
+            echo "Notarization failed. Fetching full log for UUID: ${uuid}"
+            xcrun notarytool log "${uuid}" \
+              --key "${key_path}" \
+              --key-id "${APPLE_API_KEY_ID}" \
+              --issuer "${APPLE_API_ISSUER_ID}"
+            exit 1
+          fi
+
+          xcrun stapler staple "${dmg}"
+          xcrun stapler validate "${dmg}"
+
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${TAG}"
+          dmg="build/homebrew/Freedirect-${VERSION}.dmg"
+
+          if ! gh release view "${tag}" >/dev/null 2>&1; then
+            gh release create "${tag}" --title "${tag}" --notes ""
+          fi
+
+          gh release upload "${tag}" "${dmg}" --clobber
+
+      - name: Update cask in tap
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "Missing secret: HOMEBREW_TAP_TOKEN" >&2
+            exit 1
+          fi
+
+          SHA256=$(shasum -a 256 "build/homebrew/Freedirect-${VERSION}.dmg" | awk '{print $1}')
+          TAP_DIR=$(mktemp -d)
+          gh repo clone 0xCUB3/homebrew-freedirect "${TAP_DIR}" -- --depth 1
+
+          mkdir -p "${TAP_DIR}/Casks"
+          CASK="${TAP_DIR}/Casks/freedirect.rb"
+          {
+            echo 'cask "freedirect" do'
+            echo "  version \"${VERSION}\""
+            echo "  sha256 \"${SHA256}\""
+            echo
+            echo "  url \"https://github.com/0xCUB3/Freedirect/releases/download/${TAG}/Freedirect-#{version}.dmg\","
+            echo '      verified: "github.com/0xCUB3/Freedirect/"'
+            echo '  name "Freedirect"'
+            echo '  desc "Safari Web Extension redirector for privacy-friendly frontends"'
+            echo '  homepage "https://github.com/0xCUB3/Freedirect"'
+            echo
+            echo '  depends_on macos: ">= :tahoe"'
+            echo
+            echo '  app "Freedirect.app"'
+            echo 'end'
+          } > "${CASK}"
+
+          cd "${TAP_DIR}"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/0xCUB3/homebrew-freedirect.git"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/freedirect.rb
+          git commit -m "update freedirect cask to ${VERSION}" || echo "nothing to commit"
+          git push origin main
+          rm -rf "${TAP_DIR}"
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain "${RUNNER_TEMP}/signing.keychain-db" || true

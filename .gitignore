@@ -6,3 +6,5 @@ xcuserdata/
 
 __pycache__/
 *.pyc
+
+build/
