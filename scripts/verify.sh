@@ -78,7 +78,8 @@ assert not Path('Shared (App)/GeneratedServiceCatalog.swift').exists()
 assert 'SwiftUI' not in Path('Shared (App)/ViewController.swift').read_text()
 assert 'CODE_SIGN_ENTITLEMENTS = "macOS (App)/Freedirect.entitlements";' in pbx
 assert 'CODE_SIGN_ENTITLEMENTS = "macOS (Extension)/Freedirect Extension.entitlements";' in pbx
-assert pbx.count('DEVELOPMENT_TEAM = QSA7PMJ27H;') >= 6
+assert pbx.count('DEVELOPMENT_TEAM = DNP7DGUB7B;') >= 4
+assert pbx.count('DEVELOPMENT_TEAM = QSA7PMJ27H;') >= 4
 print('project targets ok')
 PY
 
