@@ -349,6 +349,29 @@ function sanitizeStringArray(values, mapper = value => String(value)) {
   return Array.from(new Set(values.map(mapper).filter(Boolean))).slice(0, 50)
 }
 
+function sanitizeCustomFrontendId(value) {
+  const id = String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
+  return id ? `custom:${id}` : null
+}
+
+function sanitizeCustomFrontends(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const result = {}
+  for (const [rawId, rawFrontend] of Object.entries(value)) {
+    const id = sanitizeCustomFrontendId(rawId.replace(/^custom:/, ''))
+    if (!id || !rawFrontend || typeof rawFrontend !== 'object' || Array.isArray(rawFrontend)) continue
+    const instances = sanitizeStringArray(rawFrontend.instances, normalizeInstanceOrigin)
+    if (!instances.length) continue
+    const name = String(rawFrontend.name || rawId.replace(/^custom:/, '')).trim().slice(0, 80) || 'Custom'
+    result[id] = { name, instances }
+  }
+  return result
+}
+
+function serviceFrontends(service, config = {}) {
+  return { ...service.frontends, ...sanitizeCustomFrontends(config.customFrontends) }
+}
+
 function sanitizeHealth(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   const result = {}
@@ -375,18 +398,21 @@ function sanitizeServiceConfig(serviceId, rawConfig, defaultConfig) {
   if (serviceId === 'youtube' && config.frontend === 'invidious' && ['https://inv.nadeko.net', 'https://yewtu.be', 'https://vid.puffyan.us'].includes(config.instance)) {
     config = { ...config, instance: defaultConfig.instance }
   }
-  const frontend = config.frontend in service.frontends ? config.frontend : defaultConfig.frontend
-  const defaultInstance = service.frontends[frontend].instances[0]
+  const customFrontends = sanitizeCustomFrontends(config.customFrontends)
+  const frontends = serviceFrontends(service, { customFrontends })
+  const frontend = config.frontend in frontends ? config.frontend : defaultConfig.frontend
+  const defaultInstance = frontends[frontend].instances[0]
   const customInstances = sanitizeStringArray(config.customInstances, normalizeInstanceOrigin)
   const favoriteInstances = sanitizeStringArray(config.favoriteInstances, normalizeInstanceOrigin)
-  const allowedInstances = new Set([...customInstances, ...favoriteInstances, ...service.frontends[frontend].instances])
-  const instance = normalizeConfiguredInstance(serviceId, frontend, config.instance)
+  const allowedInstances = new Set([...customInstances, ...favoriteInstances, ...frontends[frontend].instances])
+  const instance = normalizeConfiguredInstance(serviceId, frontend, config.instance) || normalizeInstanceOrigin(config.instance)
   return {
     enabled: typeof config.enabled === 'boolean' ? config.enabled : defaultConfig.enabled,
     frontend,
     instance: instance && allowedInstances.has(instance) ? instance : defaultInstance,
     mode: config.mode === 'rotating' ? 'rotating' : 'selected',
     customInstances,
+    customFrontends,
     favoriteInstances,
     health: sanitizeHealth(config.health)
   }
@@ -396,25 +422,30 @@ function sanitizeServiceUpdate(serviceId, currentConfig, patch) {
   const service = SERVICE_CATALOG[serviceId]
   if (!service) throw new Error('Unknown service')
   const input = patch && typeof patch === 'object' && !Array.isArray(patch) ? patch : {}
+  const customFrontends = input.customFrontends === undefined
+    ? sanitizeCustomFrontends(currentConfig.customFrontends)
+    : sanitizeCustomFrontends(input.customFrontends)
+  const frontends = serviceFrontends(service, { customFrontends })
   const frontend = input.frontend === undefined
-    ? currentConfig.frontend
-    : (input.frontend in service.frontends ? input.frontend : currentConfig.frontend)
+    ? (currentConfig.frontend in frontends ? currentConfig.frontend : service.defaultFrontend)
+    : (input.frontend in frontends ? input.frontend : (currentConfig.frontend in frontends ? currentConfig.frontend : service.defaultFrontend))
   const customInstances = input.customInstances === undefined
     ? sanitizeStringArray(currentConfig.customInstances, normalizeInstanceOrigin)
     : sanitizeStringArray(input.customInstances, normalizeInstanceOrigin)
   const favoriteInstances = input.favoriteInstances === undefined
     ? sanitizeStringArray(currentConfig.favoriteInstances, normalizeInstanceOrigin)
     : sanitizeStringArray(input.favoriteInstances, normalizeInstanceOrigin)
-  const allowedInstances = new Set([...customInstances, ...favoriteInstances, ...service.frontends[frontend].instances])
-  const currentInstance = normalizeConfiguredInstance(serviceId, frontend, currentConfig.instance)
-  const requestedInstance = input.instance === undefined ? currentInstance : normalizeConfiguredInstance(serviceId, frontend, input.instance)
-  const defaultInstance = service.frontends[frontend].instances[0]
+  const allowedInstances = new Set([...customInstances, ...favoriteInstances, ...frontends[frontend].instances])
+  const currentInstance = normalizeConfiguredInstance(serviceId, frontend, currentConfig.instance) || normalizeInstanceOrigin(currentConfig.instance)
+  const requestedInstance = input.instance === undefined ? currentInstance : (normalizeConfiguredInstance(serviceId, frontend, input.instance) || normalizeInstanceOrigin(input.instance))
+  const defaultInstance = frontends[frontend].instances[0]
   return {
     enabled: input.enabled === undefined ? Boolean(currentConfig.enabled) : Boolean(input.enabled),
     frontend,
     instance: requestedInstance && allowedInstances.has(requestedInstance) ? requestedInstance : (currentInstance && allowedInstances.has(currentInstance) ? currentInstance : defaultInstance),
     mode: input.mode === undefined ? (currentConfig.mode === 'rotating' ? 'rotating' : 'selected') : (input.mode === 'rotating' ? 'rotating' : 'selected'),
     customInstances,
+    customFrontends,
     favoriteInstances,
     health: sanitizeHealth(currentConfig.health)
   }
@@ -531,8 +562,9 @@ async function loadPublicInstances({ force = false, bundledOnly = false } = {}) 
 function selectedInstance(serviceId, state) {
   const service = SERVICE_CATALOG[serviceId]
   const config = state.services[serviceId]
-  const frontendId = config.frontend in service.frontends ? config.frontend : service.defaultFrontend
-  const frontend = service.frontends[frontendId]
+  const frontends = serviceFrontends(service, config)
+  const frontendId = config.frontend in frontends ? config.frontend : service.defaultFrontend
+  const frontend = frontends[frontendId]
   const candidates = [...(config.favoriteInstances ?? []), ...(config.customInstances ?? []), ...frontend.instances]
   if (config.mode === 'rotating') {
     const day = Math.floor(Date.now() / 86400000)
@@ -553,8 +585,9 @@ function ruleRecords(state) {
   for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
     const config = state.services[serviceId]
     if (!config?.enabled) continue
-    const frontendId = config.frontend in service.frontends ? config.frontend : service.defaultFrontend
-    const frontend = service.frontends[frontendId]
+    const frontends = serviceFrontends(service, config)
+    const frontendId = config.frontend in frontends ? config.frontend : service.defaultFrontend
+    const frontend = frontends[frontendId]
     if (frontend.appProtocol) continue
     const instance = selectedInstance(serviceId, state)
     const templates = frontend.rules ?? service.rules
@@ -577,7 +610,7 @@ function ruleRecords(state) {
         serviceId,
         serviceName: service.name,
         frontendId,
-        frontendName: service.frontends[frontendId].name,
+        frontendName: frontends[frontendId].name,
         instance,
         source: template.source,
         substitution: templateSubstitution(instance, template.path, { dnr: true }),
@@ -594,7 +627,7 @@ function staticOverrideRules(state) {
   for (const serviceId of Object.keys(offsets)) {
     const service = SERVICE_CATALOG[serviceId]
     const config = state.services[serviceId]
-    const frontend = service.frontends[config?.frontend]
+    const frontend = serviceFrontends(service, config)[config?.frontend]
     if (state.globalEnabled && config?.enabled && !frontend?.appProtocol) continue
     const templates = serviceId === 'youtube' ? service.frontends.invidious.rules : service.rules
     templates.forEach((template, index) => rules.push({
@@ -675,8 +708,9 @@ function diagnoseUrl(urlString, state) {
   for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
     const config = state.services[serviceId]
     if (!config?.enabled) continue
-    const frontendId = config.frontend in service.frontends ? config.frontend : service.defaultFrontend
-    const frontend = service.frontends[frontendId]
+    const frontends = serviceFrontends(service, config)
+    const frontendId = config.frontend in frontends ? config.frontend : service.defaultFrontend
+    const frontend = frontends[frontendId]
     const instance = selectedInstance(serviceId, state).replace(/\/$/, '')
     const templates = frontend.rules ?? service.rules
     for (const template of templates) {
@@ -686,7 +720,7 @@ function diagnoseUrl(urlString, state) {
           url: url.href,
           serviceId,
           serviceName: service.name,
-          frontendName: service.frontends[frontendId].name,
+          frontendName: frontends[frontendId].name,
           instance,
           redirectUrl: url.href.replace(regex, templateSubstitution(instance, template.path)),
           reverseUrl: reversed,
@@ -704,7 +738,7 @@ function reverseUrl(urlString, state) {
   for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
     const config = state.services[serviceId]
     if (!config) continue
-    const frontends = Object.entries(service.frontends)
+    const frontends = Object.entries(serviceFrontends(service, config))
     for (const [, frontend] of frontends) {
       const instances = [...(config.favoriteInstances ?? []), ...(config.customInstances ?? []), ...frontend.instances]
       for (const instance of instances) {
@@ -757,11 +791,11 @@ async function fetchWithTimeout(url, timeout = HEALTH_TIMEOUT_MS) {
 async function checkInstanceHealth(serviceId, instance) {
   const service = SERVICE_CATALOG[serviceId]
   if (!service) throw new Error('Unknown service')
-  const frontendId = Object.entries(service.frontends).find(([, frontend]) => frontend.instances.includes(instance))?.[0]
-  if (frontendId && service.frontends[frontendId].appProtocol) return { ok: true, status: null, latencyMs: null, checkedAt: new Date().toISOString(), error: null }
+  const state = await getState()
+  const frontendId = Object.entries(serviceFrontends(service, state.services[serviceId])).find(([, frontend]) => frontend.instances.includes(instance))?.[0]
+  if (frontendId && serviceFrontends(service, state.services[serviceId])[frontendId].appProtocol) return { ok: true, status: null, latencyMs: null, checkedAt: new Date().toISOString(), error: null }
   const origin = normalizeInstanceOrigin(instance)
   if (!origin) throw new Error('Instance must be an HTTPS URL')
-  const state = await getState()
   let health
   try {
     const result = await fetchWithTimeout(origin)
@@ -787,14 +821,75 @@ async function checkAllSelectedHealth() {
   return results
 }
 
+async function runSanityCheck() {
+  await ensureInitialized({ rebuildIfMissing: true })
+  const state = await getState()
+  const dynamicRules = api.declarativeNetRequest?.getDynamicRules ? await callApi(api.declarativeNetRequest, 'getDynamicRules') : []
+  const sessionRules = api.declarativeNetRequest?.getSessionRules ? await callApi(api.declarativeNetRequest, 'getSessionRules') : []
+  const generated = ruleRecords(state)
+  const enabled = Object.entries(SERVICE_CATALOG).filter(([serviceId]) => state.services[serviceId]?.enabled)
+  const permission = await permissionState()
+  const issues = []
+  const checks = []
+  checks.push({ name: 'Global redirect switch', ok: state.globalEnabled, detail: state.globalEnabled ? 'enabled' : 'disabled' })
+  checks.push({ name: 'Safari all-sites permission', ok: permission.allUrls !== false, detail: permission.available ? (permission.allUrls ? 'granted' : 'not granted') : permission.reason })
+  checks.push({ name: 'Enabled services', ok: enabled.length > 0, detail: `${enabled.length} enabled` })
+  checks.push({ name: 'Generated rules', ok: generated.length > 0 || enabled.every(([serviceId, service]) => serviceFrontends(service, state.services[serviceId])[state.services[serviceId].frontend]?.appProtocol), detail: `${generated.length} expected dynamic redirect rules` })
+  checks.push({ name: 'Installed dynamic rules', ok: dynamicRules.length >= generated.length, detail: `${dynamicRules.length} installed` })
+  if (state.diagnostics.lastError) issues.push(`Rule generator: ${state.diagnostics.lastError}`)
+  if (permission.available && permission.allUrls === false) issues.push('Safari has not granted all-sites access; redirects may only work on allowed sites.')
+  if (generated.length && dynamicRules.length < generated.length) issues.push(`Only ${dynamicRules.length}/${generated.length} dynamic rules are installed. Try Rebuild rules.`)
+
+  const services = enabled.map(([serviceId, service]) => {
+    const config = state.services[serviceId]
+    const frontends = serviceFrontends(service, config)
+    const frontendId = config.frontend in frontends ? config.frontend : service.defaultFrontend
+    const frontend = frontends[frontendId]
+    const instance = selectedInstance(serviceId, state)
+    const templates = frontend.rules ?? service.rules
+    const sample = `https://${service.originalHosts[0]}/`
+    const diagnosis = diagnoseUrl(sample, state)
+    const health = config.health?.[instance] ?? null
+    const hasRule = frontend.appProtocol || generated.some(rule => rule.serviceId === serviceId)
+    const sampleMatches = Boolean(diagnosis.redirectUrl)
+    const ok = hasRule && sampleMatches
+    if (!ok) issues.push(`${service.name}: sample URL did not produce a redirect (${sample}).`)
+    return {
+      serviceId,
+      name: service.name,
+      frontend: frontend.name,
+      instance,
+      ok,
+      ruleCount: frontend.appProtocol ? templates.length : generated.filter(rule => rule.serviceId === serviceId).length,
+      sample,
+      sampleRedirect: diagnosis.redirectUrl,
+      health: health ? { ok: health.ok, status: health.status, latencyMs: health.latencyMs, error: health.error ?? null, checkedAt: health.checkedAt ?? null } : null
+    }
+  })
+  const healthRecords = services.filter(service => service.health)
+  const failedHealth = healthRecords.filter(service => service.health && !service.health.ok)
+  if (failedHealth.length) issues.push(`${failedHealth.length} selected instance health checks are failed. This is reachability only; redirects can still work if the instance serves deep links.`)
+  return {
+    ok: issues.length === 0,
+    checkedAt: new Date().toISOString(),
+    summary: `${issues.length ? 'Issues found' : 'Looks good'} · ${enabled.length} services · ${dynamicRules.length} installed rules · ${failedHealth.length} failed health checks`,
+    checks,
+    services,
+    issues,
+    diagnostics: state.diagnostics,
+    sessionRuleCount: sessionRules.length
+  }
+}
+
 async function selectBestInstance(serviceId) {
   await loadPublicInstances()
   const state = await getState()
   const service = SERVICE_CATALOG[serviceId]
   const config = state.services[serviceId]
   if (!service || !config) throw new Error('Unknown service')
-  const frontendId = config.frontend in service.frontends ? config.frontend : service.defaultFrontend
-  const frontend = service.frontends[frontendId]
+  const frontends = serviceFrontends(service, config)
+  const frontendId = config.frontend in frontends ? config.frontend : service.defaultFrontend
+  const frontend = frontends[frontendId]
   const candidates = Array.from(new Set([...(config.favoriteInstances ?? []), ...(config.customInstances ?? []), ...frontend.instances])).slice(0, 80)
   if (!candidates.length) throw new Error('No instances available')
   if (frontend.appProtocol) {
@@ -1240,6 +1335,31 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await saveState(state)
         return { diagnostics: await rebuildRules() }
       }
+      case 'addCustomFrontend': {
+        const config = state.services[message.serviceId]
+        if (!config) throw new Error('Unknown service')
+        const id = sanitizeCustomFrontendId(message.frontendId || message.name)
+        if (!id) throw new Error('Custom frontend needs a name')
+        const instance = normalizeInstanceOrigin(message.instance)
+        if (!instance) throw new Error('Custom frontend instance must be an HTTPS URL')
+        const customFrontends = sanitizeCustomFrontends({ ...(config.customFrontends ?? {}), [id]: { name: message.name || id.replace(/^custom:/, ''), instances: [instance] } })
+        state.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, { customFrontends, frontend: id, instance })
+        await saveState(state)
+        return { diagnostics: await rebuildRules() }
+      }
+      case 'removeCustomFrontend': {
+        const config = state.services[message.serviceId]
+        if (!config) throw new Error('Unknown service')
+        const id = sanitizeCustomFrontendId(String(message.frontendId || '').replace(/^custom:/, ''))
+        if (!id || !config.customFrontends?.[id]) throw new Error('Unknown custom frontend')
+        const customFrontends = { ...(config.customFrontends ?? {}) }
+        delete customFrontends[id]
+        const patch = { customFrontends }
+        if (config.frontend === id) patch.frontend = SERVICE_CATALOG[message.serviceId].defaultFrontend
+        state.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, patch)
+        await saveState(state)
+        return { diagnostics: await rebuildRules() }
+      }
       case 'removeCustomInstance': {
         const config = state.services[message.serviceId]
         if (!config) throw new Error('Unknown service')
@@ -1248,9 +1368,10 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const customInstances = (config.customInstances ?? []).filter(value => value !== instance)
         const favoriteInstances = (config.favoriteInstances ?? []).filter(value => value !== instance)
         const service = SERVICE_CATALOG[message.serviceId]
-        const frontend = config.frontend in service.frontends ? config.frontend : service.defaultFrontend
+        const frontends = serviceFrontends(service, config)
+        const frontend = config.frontend in frontends ? config.frontend : service.defaultFrontend
         const patch = { customInstances, favoriteInstances }
-        if (config.instance === instance) patch.instance = service.frontends[frontend].instances[0]
+        if (config.instance === instance) patch.instance = frontends[frontend].instances[0]
         state.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, patch)
         await saveState(state)
         return { diagnostics: await rebuildRules() }
@@ -1273,6 +1394,8 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { best: await selectBestInstance(message.serviceId) }
       case 'checkAllSelectedHealth':
         return { health: await checkAllSelectedHealth() }
+      case 'runSanityCheck':
+        return { report: await runSanityCheck() }
       case 'refreshPublicInstances':
         return { instances: await loadPublicInstances({ force: true }) }
       case 'rebuildRules':

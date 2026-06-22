@@ -78,10 +78,12 @@
     <div class="details-grid">
       <p id="diag" class="muted" aria-live="polite">Loading…</p>
       <div class="details-row">
+        <button id="runSanity" class="primary" data-i18n="runSanityCheck">Run sanity check</button>
         <button id="checkAll" data-i18n="checkSelectedInstances">Check selected instances</button>
         <button id="showCommands" data-i18n="showCommands">Show commands</button>
         <button id="clearBypasses" data-i18n="clearBypasses">Clear bypasses</button>
       </div>
+      <pre id="sanityReport" aria-live="polite">Sanity check not run.</pre>
       <ul id="commands" class="muted" aria-live="polite"></ul>
       <ul id="bypasses" class="muted" aria-live="polite"></ul>
     </div>

@@ -11,7 +11,7 @@ const api = globalThis.chrome ?? globalThis.browser
   function runtimeError() { return api?.runtime?.lastError?.message }
   function messageTimeout(type) {
     if (['selectBestInstance', 'checkAllSelectedHealth', 'refreshPublicInstances'].includes(type)) return 45000
-    if (['checkInstanceHealth', 'rebuildRules', 'applyProfile', 'setAllServices', 'resetState', 'updateService', 'importState'].includes(type)) return 20000
+    if (['checkInstanceHealth', 'rebuildRules', 'applyProfile', 'setAllServices', 'resetState', 'updateService', 'importState', 'runSanityCheck'].includes(type)) return 20000
     return 10000
   }
   function msg(type, body = {}) {
@@ -44,11 +44,38 @@ const api = globalThis.chrome ?? globalThis.browser
     })
   }
   function esc(value) { return String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char])) }
+  function setBusy(button, busy, label) {
+    if (!button) return
+    if (busy) {
+      button.dataset.originalText = button.textContent
+      button.textContent = label || t('working')
+      button.disabled = true
+      button.setAttribute('aria-busy', 'true')
+    } else {
+      button.textContent = button.dataset.originalText || button.textContent
+      button.disabled = false
+      button.removeAttribute('aria-busy')
+    }
+  }
+  async function runButtonAction(button, label, action) {
+    setBusy(button, true, label)
+    $('diag').innerHTML = `<span class="muted">${esc(label || t('working'))}</span>`
+    try {
+      await action()
+      await refresh()
+    } catch (error) {
+      $('diag').innerHTML = `<span class="bad">${esc(error?.message || String(error))}</span>`
+    } finally {
+      setBusy(button, false)
+    }
+  }
   function optionList(entries, selected, label = value => value.name) {
     return entries.map(([id, item]) => `<option value="${esc(id)}" ${id === selected ? 'selected' : ''}>${esc(label(item, id))}</option>`).join('')
   }
+  function effectiveFrontends(service, config) { return { ...service.frontends, ...(config.customFrontends || {}) } }
   function instanceList(service, config) {
-    const frontend = service.frontends[config.frontend] || service.frontends[service.defaultFrontend]
+    const frontends = effectiveFrontends(service, config)
+    const frontend = frontends[config.frontend] || frontends[service.defaultFrontend]
     const values = [...(config.favoriteInstances || []), ...(config.customInstances || []), ...frontend.instances]
     return Array.from(new Set(values)).map(value => `<option value="${esc(value)}" ${value === config.instance ? 'selected' : ''}>${esc(value)}</option>`).join('')
   }
@@ -59,7 +86,23 @@ const api = globalThis.chrome ?? globalThis.browser
     const stale = Number.isFinite(checkedAt) && Date.now() - checkedAt > HEALTH_STALE_MS
     if (health.ok && stale) return `<span class="badge warn">${esc(t('stale'))} · ${health.latencyMs ?? 'ok'} ms</span>`
     if (health.ok) return `<span class="badge ok">${health.latencyMs ?? 'ok'} ms</span>`
-    return `<span class="badge bad">${esc(t('failed'))}</span>`
+    return `<span class="badge bad" title="${esc(health.error || 'failed')}">${esc(t('failed'))}</span>`
+  }
+  function formatSanityReport(report) {
+    const lines = [report.summary, `Checked: ${report.checkedAt}`, '']
+    lines.push('Core checks:')
+    for (const check of report.checks || []) lines.push(`${check.ok ? '✓' : '✗'} ${check.name}: ${check.detail}`)
+    if (report.issues?.length) {
+      lines.push('', 'Issues:')
+      for (const issue of report.issues) lines.push(`- ${issue}`)
+    }
+    lines.push('', 'Enabled services:')
+    for (const service of report.services || []) {
+      const health = service.health ? (service.health.ok ? `${service.health.latencyMs ?? 'ok'} ms` : `failed${service.health.error ? ` (${service.health.error})` : ''}`) : 'not checked'
+      lines.push(`${service.ok ? '✓' : '✗'} ${service.name} → ${service.frontend} · ${service.ruleCount} rules · health ${health}`)
+      if (service.sampleRedirect) lines.push(`  ${service.sample} → ${service.sampleRedirect}`)
+    }
+    return lines.join('\n')
   }
   function render(data) {
     current = data
@@ -79,10 +122,11 @@ const api = globalThis.chrome ?? globalThis.browser
       const config = data.state.services[id]
       const favorite = (config.favoriteInstances || []).includes(config.instance)
       const isCustom = (config.customInstances || []).includes(config.instance)
+      const frontends = effectiveFrontends(service, config)
       return `<div class="service ${config.enabled ? '' : 'disabled'}" data-service="${esc(id)}">
         <label class="toggle"><input type="checkbox" data-field="enabled" ${config.enabled ? 'checked' : ''} aria-label="${esc(service.name)} ${esc(t('enabled'))}"></label>
         <div class="name"><strong>${esc(service.name)}</strong><div class="hosts">${esc(service.originalHosts.slice(0, 3).join(', '))} · ${esc(service.confidence)}</div></div>
-        <select data-field="frontend" aria-label="${esc(service.name)} ${esc(t('frontend'))}">${optionList(Object.entries(service.frontends), config.frontend)}</select>
+        <select data-field="frontend" aria-label="${esc(service.name)} ${esc(t('frontend'))}">${optionList(Object.entries(frontends), config.frontend, (frontend, frontendId) => `${frontend.name}${frontendId.startsWith('custom:') ? ' (custom)' : ''}`)}</select>
         <select data-field="instance" aria-label="${esc(service.name)} ${esc(t('instance'))}">${instanceList(service, config)}</select>
         <select data-field="mode" aria-label="${esc(service.name)} ${esc(t('instanceMode'))}"><option value="selected" ${config.mode === 'selected' ? 'selected' : ''}>${esc(t('selectedMode'))}</option><option value="rotating" ${config.mode === 'rotating' ? 'selected' : ''}>${esc(t('rotatingMode'))}</option></select>
         <div class="row-actions">${healthLabel(config)}<button class="small" data-action="favorite" title="${favorite ? esc(t('unpin')) : esc(t('pin'))}">${favorite ? '★' : '☆'}</button><button class="small" data-action="best">${esc(t('selectBest'))}</button><button class="small" data-action="health">${esc(t('check'))}</button><button class="small" data-action="custom">Custom…</button>${isCustom ? '<button class="small" data-action="removeCustom">Remove</button>' : ''}</div>
@@ -107,7 +151,7 @@ const api = globalThis.chrome ?? globalThis.browser
     const serviceId = row.dataset.service
     const field = event.target.dataset.field
     const patch = { [field]: field === 'enabled' ? event.target.checked : event.target.value }
-    if (field === 'frontend') patch.instance = current.catalog[serviceId].frontends[event.target.value].instances[0]
+    if (field === 'frontend') patch.instance = effectiveFrontends(current.catalog[serviceId], current.state.services[serviceId])[event.target.value].instances[0]
     await msg('updateService', { serviceId, patch })
     await refresh()
   })
@@ -122,15 +166,31 @@ const api = globalThis.chrome ?? globalThis.browser
       if (button.dataset.action === 'best') await msg('selectBestInstance', { serviceId })
       if (button.dataset.action === 'health') await msg('checkInstanceHealth', { serviceId, instance })
       if (button.dataset.action === 'custom') {
-        const custom = prompt('Custom instance URL', 'https://')?.trim()
-        if (custom && custom !== 'https://') await msg('addCustomInstance', { serviceId, instance: custom })
+        const config = current.state.services[serviceId]
+        const frontendId = config.frontend
+        if (frontendId.startsWith('custom:') && confirm('Remove this custom frontend type?')) await msg('removeCustomFrontend', { serviceId, frontendId })
+        else if (confirm('Add a new frontend type? Press Cancel to add a URL to the selected type.')) {
+          const name = prompt('Frontend type name (for example: Redlib, Libreddit, SafeTwitch)')?.trim()
+          if (name) {
+            const custom = prompt(`First ${name} instance URL`, 'https://')?.trim()
+            if (custom && custom !== 'https://') await msg('addCustomFrontend', { serviceId, name, instance: custom })
+          }
+        } else {
+          const custom = prompt('Custom instance URL for the selected frontend type', 'https://')?.trim()
+          if (custom && custom !== 'https://') await msg('addCustomInstance', { serviceId, instance: custom })
+        }
       }
       if (button.dataset.action === 'removeCustom') await msg('removeCustomInstance', { serviceId, instance })
       await refresh()
     } catch (error) { alert(error?.message || String(error)) }
   })
-  $('rebuild').addEventListener('click', () => msg('rebuildRules').then(refresh))
-  $('refreshInstances').addEventListener('click', () => msg('refreshPublicInstances').then(refresh))
+  $('rebuild').addEventListener('click', event => runButtonAction(event.currentTarget, t('rebuildingRules'), () => msg('rebuildRules')))
+  $('refreshInstances').addEventListener('click', event => runButtonAction(event.currentTarget, t('updatingInstanceLists'), () => msg('refreshPublicInstances')))
+  $('runSanity').addEventListener('click', async () => {
+    $('sanityReport').textContent = 'Running sanity check…'
+    try { $('sanityReport').textContent = formatSanityReport((await msg('runSanityCheck')).report) }
+    catch (error) { $('sanityReport').textContent = `Sanity check failed: ${error?.message || error}` }
+  })
   $('checkAll').addEventListener('click', () => msg('checkAllSelectedHealth').then(refresh))
   $('showCommands').addEventListener('click', async () => {
     const result = await msg('getCommands')
