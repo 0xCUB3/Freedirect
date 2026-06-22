@@ -192,7 +192,18 @@ const SERVICE_CATALOG = {
     originalHosts: ['maps.google.com', 'www.google.com'],
     defaultFrontend: 'osm',
     frontends: {
-      osm: { name: 'OpenStreetMap', instances: ['https://www.openstreetmap.org'] }
+      osm: { name: 'OpenStreetMap', instances: ['https://www.openstreetmap.org'] },
+      appleMaps: { name: 'Apple Maps', instances: ['https://maps.apple.com'], rules: [
+        { source: '^https?://maps\\.google\\.[^/]+/maps\\?q=([^&#]+).*', path: '/?q=$1', priority: 20 },
+        { source: '^https?://maps\\.google\\.[^/]+/search/([^?&#]+).*', path: '/?q=$1', priority: 20 },
+        { source: '^https?://maps\\.google\\.[^/]+/place/([^?&#]+).*', path: '/?q=$1', priority: 20 },
+        { source: '^https?://maps\\.google\\.[^/]+/@(-?[0-9.]+),(-?[0-9.]+),.*', path: '/?ll=$1,$2', priority: 20 },
+        { source: '^https?://(www\\.)?google\\.[^/]+/maps/search/([^?&#]+).*', path: '/?q=$2', priority: 20 },
+        { source: '^https?://(www\\.)?google\\.[^/]+/maps/place/([^?&#]+).*', path: '/?q=$2', priority: 20 },
+        { source: '^https?://(www\\.)?google\\.[^/]+/maps/@(-?[0-9.]+),(-?[0-9.]+),.*', path: '/?ll=$2,$3', priority: 20 },
+        { source: '^https?://maps\\.google\\.[^/]+/(.*)', path: '/?q=$1' },
+        { source: '^https?://(www\\.)?google\\.[^/]+/maps/(.*)', path: '/?q=$2' }
+      ] }
     },
     rules: [
       { source: '^https?://maps\\.google\\.[^/]+/(.*)', path: '/search?query=$1' },

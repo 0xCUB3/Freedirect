@@ -94,6 +94,17 @@ $('primaryAction').addEventListener('click', () => {
   if (primaryAction === 'redirect') return msg('redirectCurrent').then(refresh)
   if (primaryAction === 'reverse') return msg('reverseCurrent').then(refresh)
 })
-$('options').addEventListener('click', () => api.runtime.openOptionsPage())
+async function openSettings() {
+  const url = api.runtime.getURL?.('options.html')
+  if (url && api.tabs?.create) {
+    try {
+      await api.tabs.create({ url })
+      return
+    } catch {}
+  }
+  api.runtime.openOptionsPage()
+}
+
+$('options').addEventListener('click', openSettings)
 
 refresh()
