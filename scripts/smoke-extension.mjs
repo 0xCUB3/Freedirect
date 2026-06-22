@@ -178,7 +178,7 @@ await send({ type: 'updateService', serviceId: 'youtube', patch: { mode: 'rotati
 response = await send({ type: 'getState' })
 if (!response.state.services.youtube.customInstances.includes('https://example.invalid')) throw new Error('Expected custom instance')
 if (!response.state.services.youtube.favoriteInstances.includes('https://example.invalid')) throw new Error('Expected favorite instance')
-if (response.state.services.youtube.mode !== 'rotating') throw new Error('Expected rotating instance mode')
+if (response.state.services.youtube.mode !== 'selected') throw new Error('Expected selected instance mode')
 await send({ type: 'updateService', serviceId: 'youtube', patch: { frontend: 'not-real', instance: 'javascript:alert(1)', customInstances: ['http://unsafe.example'] } })
 response = await send({ type: 'getState' })
 if (response.state.services.youtube.frontend !== 'invidious' || response.state.services.youtube.instance !== 'https://example.invalid') throw new Error('Expected unsafe service update to be sanitized')

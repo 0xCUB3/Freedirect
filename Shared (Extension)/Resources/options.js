@@ -7,11 +7,13 @@ const api = globalThis.chrome ?? globalThis.browser
   document.querySelectorAll('[data-i18n-placeholder]').forEach(node => { node.placeholder = t(node.dataset.i18nPlaceholder) })
   document.querySelectorAll('[data-i18n-aria-label]').forEach(node => { node.setAttribute('aria-label', t(node.dataset.i18nAriaLabel)) })
   let current
+  let customServiceId = null
+  let serviceFilter = 'all'
   const HEALTH_STALE_MS = 7 * 24 * 60 * 60 * 1000
   function runtimeError() { return api?.runtime?.lastError?.message }
   function messageTimeout(type) {
-    if (['selectBestInstance', 'checkAllSelectedHealth', 'refreshPublicInstances'].includes(type)) return 45000
-    if (['checkInstanceHealth', 'rebuildRules', 'applyProfile', 'setAllServices', 'resetState', 'updateService', 'importState', 'runSanityCheck'].includes(type)) return 20000
+    if (['selectBestInstance', 'checkAllSelectedHealth', 'refreshPublicInstances', 'setAllServices'].includes(type)) return 45000
+    if (['checkInstanceHealth', 'rebuildRules', 'applyProfile', 'resetState', 'updateService', 'importState', 'runSanityCheck'].includes(type)) return 20000
     return 10000
   }
   function msg(type, body = {}) {
@@ -57,12 +59,14 @@ const api = globalThis.chrome ?? globalThis.browser
       button.removeAttribute('aria-busy')
     }
   }
-  async function runButtonAction(button, label, action) {
+  function nextPaint() { return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))) }
+  async function runButtonAction(button, label, action, { refreshAfter = true } = {}) {
     setBusy(button, true, label)
     $('diag').innerHTML = `<span class="muted">${esc(label || t('working'))}</span>`
+    await nextPaint()
     try {
       await action()
-      await refresh()
+      if (refreshAfter) await refresh()
     } catch (error) {
       $('diag').innerHTML = `<span class="bad">${esc(error?.message || String(error))}</span>`
     } finally {
@@ -79,7 +83,9 @@ const api = globalThis.chrome ?? globalThis.browser
     const values = [...(config.favoriteInstances || []), ...(config.customInstances || []), ...frontend.instances]
     return Array.from(new Set(values)).map(value => `<option value="${esc(value)}" ${value === config.instance ? 'selected' : ''}>${esc(value)}</option>`).join('')
   }
-  function healthLabel(config) {
+  function healthLabel(config, service) {
+    const frontends = effectiveFrontends(service, config)
+    if (frontends[config.frontend]?.appProtocol) return `<span class="badge na">${esc(t('notApplicable'))}</span>`
     const health = config.health?.[config.instance]
     if (!health) return `<span class="badge">${esc(t('notChecked'))}</span>`
     const checkedAt = Date.parse(health.checkedAt || '')
@@ -87,6 +93,20 @@ const api = globalThis.chrome ?? globalThis.browser
     if (health.ok && stale) return `<span class="badge warn">${esc(t('stale'))} · ${health.latencyMs ?? 'ok'} ms</span>`
     if (health.ok) return `<span class="badge ok">${health.latencyMs ?? 'ok'} ms</span>`
     return `<span class="badge bad" title="${esc(health.error || 'failed')}">${esc(t('failed'))}</span>`
+  }
+  function openCustomDialog(serviceId) {
+    customServiceId = serviceId
+    const service = current.catalog[serviceId]
+    const config = current.state.services[serviceId]
+    const frontends = effectiveFrontends(service, config)
+    $('customTitle').textContent = `${service.name} custom instances`
+    $('customHint').textContent = 'Add an instance URL to an existing frontend type, or choose New type.'
+    $('customFrontendType').innerHTML = `${optionList(Object.entries(frontends), config.frontend)}<option value="__new__">New type…</option>`
+    $('customInstanceUrl').value = ''
+    $('customFrontendName').value = ''
+    $('customFrontendNameRow').classList.add('hidden')
+    $('removeCustomFrontend').hidden = !config.frontend.startsWith('custom:')
+    $('customDialog').showModal()
   }
   function formatSanityReport(report) {
     const lines = [report.summary, `Checked: ${report.checkedAt}`, '']
@@ -112,13 +132,29 @@ const api = globalThis.chrome ?? globalThis.browser
     current = data
     $('profile').innerHTML = optionList(Object.entries(data.profiles), data.state.profile, profile => profile.name)
     const query = $('serviceSearch').value.trim().toLowerCase()
-    const filter = $('serviceFilter').value
+    const filter = serviceFilter
     const rows = Object.entries(data.catalog).filter(([id, service]) => {
       const config = data.state.services[id]
       const haystack = [id, service.name, service.originalHosts.join(' '), Object.values(service.frontends).map(frontend => frontend.name).join(' ')].join(' ').toLowerCase()
       if (filter === 'enabled' && !config.enabled) return false
       if (filter === 'disabled' && config.enabled) return false
       return !query || haystack.includes(query)
+    }).sort(([aId, aService], [bId, bService]) => {
+      const aConfig = data.state.services[aId]
+      const bConfig = data.state.services[bId]
+      const aPinned = (aConfig.favoriteInstances || []).includes(aConfig.instance)
+      const bPinned = (bConfig.favoriteInstances || []).includes(bConfig.instance)
+      const sort = $('sortOrder').value
+      if (aPinned !== bPinned) return aPinned ? -1 : 1
+      if (sort === 'name') return aService.name.localeCompare(bService.name)
+      if (sort === 'enabled' && aConfig.enabled !== bConfig.enabled) return aConfig.enabled ? -1 : 1
+      if (sort === 'health') {
+        const rank = config => config.health?.[config.instance]?.ok ? 0 : (config.health?.[config.instance] ? 2 : 1)
+        const diff = rank(aConfig) - rank(bConfig)
+        if (diff) return diff
+      }
+      if (aConfig.enabled !== bConfig.enabled) return aConfig.enabled ? -1 : 1
+      return 0
     })
     const enabledCount = Object.values(data.state.services).filter(config => config.enabled).length
     $('serviceSummary').textContent = t('shownEnabledSummary', [String(rows.length), String(Object.keys(data.catalog).length), String(enabledCount)])
@@ -132,8 +168,7 @@ const api = globalThis.chrome ?? globalThis.browser
         <div class="name"><strong>${esc(service.name)}</strong><div class="hosts">${esc(service.originalHosts.slice(0, 3).join(', '))} · ${esc(service.confidence)}</div></div>
         <select data-field="frontend" aria-label="${esc(service.name)} ${esc(t('frontend'))}">${optionList(Object.entries(frontends), config.frontend, (frontend, frontendId) => `${frontend.name}${frontendId.startsWith('custom:') ? ' (custom)' : ''}`)}</select>
         <select data-field="instance" aria-label="${esc(service.name)} ${esc(t('instance'))}">${instanceList(service, config)}</select>
-        <select data-field="mode" aria-label="${esc(service.name)} ${esc(t('instanceMode'))}"><option value="selected" ${config.mode === 'selected' ? 'selected' : ''}>${esc(t('selectedMode'))}</option><option value="rotating" ${config.mode === 'rotating' ? 'selected' : ''}>${esc(t('rotatingMode'))}</option></select>
-        <div class="row-actions">${healthLabel(config)}<button class="small" data-action="favorite" title="${favorite ? esc(t('unpin')) : esc(t('pin'))}">${favorite ? '★' : '☆'}</button><button class="small" data-action="best">${esc(t('selectBest'))}</button><button class="small" data-action="health">${esc(t('check'))}</button><button class="small" data-action="custom">Custom…</button>${isCustom ? '<button class="small" data-action="removeCustom">Remove</button>' : ''}</div>
+        <div class="row-actions">${healthLabel(config, service)}<div class="action-buttons"><button class="icon ${favorite ? 'active' : ''}" data-action="favorite" title="${favorite ? esc(t('unpin')) : esc(t('pin'))}" aria-label="${favorite ? esc(t('unpin')) : esc(t('pin'))}">${favorite ? '★' : '☆'}</button><button class="small" data-action="best">${esc(t('selectBest'))}</button><button class="small" data-action="health">${esc(t('check'))}</button><button class="small" data-action="custom">Custom…</button>${isCustom ? '<button class="small" data-action="removeCustom">Remove</button>' : ''}</div></div>
       </div>`
     }).join('')
     $('diag').innerHTML = `${data.state.diagnostics.lastRuleCount || 0} dynamic rules. Last generated: ${esc(data.state.diagnostics.lastGeneratedAt || 'never')}. Instance lists: ${esc(data.state.diagnostics.lastInstanceRefreshAt || 'built-in')}. ${data.state.diagnostics.lastInstanceRefreshError ? `<span class="bad">${esc(data.state.diagnostics.lastInstanceRefreshError)}</span>` : ''} ${data.state.diagnostics.lastError ? `<span class="bad">${esc(data.state.diagnostics.lastError)}</span>` : '<span class="ok">No generator errors.</span>'}`
@@ -143,12 +178,73 @@ const api = globalThis.chrome ?? globalThis.browser
     try { render(await msg('getState')) }
     catch (error) { $('diag').innerHTML = `<span class="bad">${esc(error?.message || String(error))}</span>` }
   }
+  function setRowHealthText(serviceId, text, className = '') {
+    const badge = document.querySelector(`.service[data-service="${CSS.escape(serviceId)}"] .badge`)
+    if (!badge) return
+    badge.className = `badge ${className}`.trim()
+    badge.textContent = text
+  }
+  function setRowInstance(serviceId, instance) {
+    const select = document.querySelector(`.service[data-service="${CSS.escape(serviceId)}"] [data-field="instance"]`)
+    if (select && instance) select.value = instance
+  }
+  function updateCurrentService(serviceId, serviceState) {
+    if (current?.state?.services?.[serviceId] && serviceState) current.state.services[serviceId] = serviceState
+  }
+  async function refreshServiceState(serviceId) {
+    const data = await msg('getState')
+    updateCurrentService(serviceId, data.state.services[serviceId])
+    return data.state.services[serviceId]
+  }
+  async function checkServiceOrBest(serviceId) {
+    const config = current?.state?.services?.[serviceId]
+    if (!config?.enabled) return
+    const service = current.catalog[serviceId]
+    const frontend = effectiveFrontends(service, config)[config.frontend]
+    if (frontend?.appProtocol) {
+      setRowHealthText(serviceId, t('notApplicable'), 'na')
+      return
+    }
+    setRowHealthText(serviceId, 'checking…')
+    await nextPaint()
+    const health = await msg('checkInstanceHealth', { serviceId, instance: config.instance }).then(result => result.health, () => ({ ok: false }))
+    if (!health?.ok) {
+      setRowHealthText(serviceId, 'finding best…', 'warn')
+      await nextPaint()
+      await msg('selectBestInstance', { serviceId }).catch(() => null)
+    }
+    const nextConfig = await refreshServiceState(serviceId).catch(() => null)
+    const activeConfig = nextConfig || current?.state?.services?.[serviceId]
+    const activeHealth = activeConfig?.health?.[activeConfig.instance]
+    setRowInstance(serviceId, activeConfig?.instance)
+    if (!activeHealth) setRowHealthText(serviceId, t('notChecked'))
+    else if (activeHealth.ok) setRowHealthText(serviceId, `${activeHealth.latencyMs ?? 'ok'} ms`, 'ok')
+    else setRowHealthText(serviceId, t('failed'), 'bad')
+  }
+  async function checkEnabledProgressively() {
+    const ids = Object.keys(current?.state?.services || {}).filter(id => current.state.services[id].enabled)
+    let index = 0
+    const nextId = () => ids[index++]
+    await Promise.all(Array.from({ length: Math.min(4, ids.length) }, async () => {
+      for (let serviceId = nextId(); serviceId; serviceId = nextId()) await checkServiceOrBest(serviceId)
+    }))
+    await refresh()
+  }
   $('profile').addEventListener('change', event => msg('applyProfile', { profile: event.target.value }).then(refresh))
-  $('enableAll').addEventListener('click', () => msg('setAllServices', { enabled: true }).then(refresh))
-  $('disableAll').addEventListener('click', () => msg('setAllServices', { enabled: false }).then(refresh))
+  $('saveProfile').addEventListener('click', async () => {
+    const name = prompt('Save current enabled services as profile')?.trim()
+    if (name) await msg('saveProfile', { name }).then(refresh)
+  })
+  $('enableAll').addEventListener('click', event => runButtonAction(event.currentTarget, 'Enabling…', async () => { await msg('setAllServices', { enabled: true }); await refresh(); await checkEnabledProgressively() }, { refreshAfter: false }))
+  $('disableAll').addEventListener('click', event => runButtonAction(event.currentTarget, 'Disabling…', () => msg('setAllServices', { enabled: false })))
   $('resetDefaults').addEventListener('click', () => { if (confirm('Reset Freedirect settings to defaults?')) msg('resetState').then(refresh) })
   $('serviceSearch').addEventListener('input', () => { if (current) render(current) })
-  $('serviceFilter').addEventListener('change', () => { if (current) render(current) })
+  $('serviceFilter').addEventListener('click', () => {
+    serviceFilter = serviceFilter === 'all' ? 'enabled' : serviceFilter === 'enabled' ? 'disabled' : 'all'
+    $('serviceFilter').textContent = serviceFilter === 'all' ? '☰ All' : serviceFilter === 'enabled' ? '☰ On' : '☰ Off'
+    if (current) render(current)
+  })
+  $('sortOrder').addEventListener('change', () => { if (current) render(current) })
   $('services').addEventListener('change', async event => {
     const row = event.target.closest('.service')
     if (!row || !event.target.dataset.field || event.target.dataset.field === 'custom') return
@@ -156,8 +252,12 @@ const api = globalThis.chrome ?? globalThis.browser
     const field = event.target.dataset.field
     const patch = { [field]: field === 'enabled' ? event.target.checked : event.target.value }
     if (field === 'frontend') patch.instance = effectiveFrontends(current.catalog[serviceId], current.state.services[serviceId])[event.target.value].instances[0]
+    const status = row.querySelector('.badge')
+    if ((field === 'instance' || field === 'frontend' || field === 'enabled') && status) status.textContent = field === 'enabled' && !event.target.checked ? t('notChecked') : 'checking…'
+    await nextPaint()
     await msg('updateService', { serviceId, patch })
     await refresh()
+    if ((field === 'instance' || field === 'frontend' || field === 'enabled') && current.state.services[serviceId]?.enabled) await checkServiceOrBest(serviceId)
   })
   $('services').addEventListener('click', async event => {
     const button = event.target.closest('button[data-action]')
@@ -170,19 +270,8 @@ const api = globalThis.chrome ?? globalThis.browser
       if (button.dataset.action === 'best') await msg('selectBestInstance', { serviceId })
       if (button.dataset.action === 'health') await msg('checkInstanceHealth', { serviceId, instance })
       if (button.dataset.action === 'custom') {
-        const config = current.state.services[serviceId]
-        const frontendId = config.frontend
-        if (frontendId.startsWith('custom:') && confirm('Remove this custom frontend type?')) await msg('removeCustomFrontend', { serviceId, frontendId })
-        else if (confirm('Add a new frontend type? Press Cancel to add a URL to the selected type.')) {
-          const name = prompt('Frontend type name (for example: Redlib, Libreddit, SafeTwitch)')?.trim()
-          if (name) {
-            const custom = prompt(`First ${name} instance URL`, 'https://')?.trim()
-            if (custom && custom !== 'https://') await msg('addCustomFrontend', { serviceId, name, instance: custom })
-          }
-        } else {
-          const custom = prompt('Custom instance URL for the selected frontend type', 'https://')?.trim()
-          if (custom && custom !== 'https://') await msg('addCustomInstance', { serviceId, instance: custom })
-        }
+        openCustomDialog(serviceId)
+        return
       }
       if (button.dataset.action === 'removeCustom') await msg('removeCustomInstance', { serviceId, instance })
       await refresh()
@@ -190,12 +279,39 @@ const api = globalThis.chrome ?? globalThis.browser
   })
   $('rebuild').addEventListener('click', event => runButtonAction(event.currentTarget, t('rebuildingRules'), () => msg('rebuildRules')))
   $('refreshInstances').addEventListener('click', event => runButtonAction(event.currentTarget, t('updatingInstanceLists'), () => msg('refreshPublicInstances')))
+  $('customFrontendType').addEventListener('change', event => {
+    $('customFrontendNameRow').classList.toggle('hidden', event.target.value !== '__new__')
+  })
+  $('saveCustom').addEventListener('click', async () => {
+    if (!customServiceId) return
+    const instance = $('customInstanceUrl').value.trim()
+    const frontendType = $('customFrontendType').value
+    const name = $('customFrontendName').value.trim()
+    try {
+      if (frontendType === '__new__') await msg('addCustomFrontend', { serviceId: customServiceId, name, instance })
+      else {
+        await msg('updateService', { serviceId: customServiceId, patch: { frontend: frontendType } })
+        await msg('addCustomInstance', { serviceId: customServiceId, instance })
+      }
+      $('customDialog').close()
+      await refresh()
+    } catch (error) { alert(error?.message || String(error)) }
+  })
+  $('removeCustomFrontend').addEventListener('click', async () => {
+    if (!customServiceId) return
+    const frontendId = current.state.services[customServiceId].frontend
+    try {
+      await msg('removeCustomFrontend', { serviceId: customServiceId, frontendId })
+      $('customDialog').close()
+      await refresh()
+    } catch (error) { alert(error?.message || String(error)) }
+  })
   $('runSanity').addEventListener('click', async () => {
     $('sanityReport').textContent = 'Running sanity check…'
     try { $('sanityReport').textContent = formatSanityReport((await msg('runSanityCheck')).report) }
     catch (error) { $('sanityReport').textContent = `Sanity check failed: ${error?.message || error}` }
   })
-  $('checkAll').addEventListener('click', () => msg('checkAllSelectedHealth').then(refresh))
+  $('checkAll').addEventListener('click', event => runButtonAction(event.currentTarget, 'Checking selected instances…', checkEnabledProgressively, { refreshAfter: false }))
   $('showCommands').addEventListener('click', async () => {
     const result = await msg('getCommands')
     $('commands').innerHTML = result.available ? result.commands.map(command => `<li>${esc(command.description || command.name)} — ${esc(command.shortcut || 'unassigned')}</li>`).join('') : `<li>${esc(result.reason || t('commandsUnavailable'))}</li>`

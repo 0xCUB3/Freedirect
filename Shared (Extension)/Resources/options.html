@@ -20,10 +20,15 @@
     button.small { padding: 5px 8px; font-size: 12px; }
     button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid color-mix(in oklab, var(--primary), white 45%); outline-offset: 2px; }
     .toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; align-items: center; }
-    .filters { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(150px, 190px) minmax(150px, 210px) auto auto auto; gap: 8px; align-items: center; margin: 12px 0; }
-    .summary { display: inline-flex; min-height: 34px; align-items: center; border: 1px solid var(--border); border-radius: 999px; padding: 5px 10px; color: var(--muted); background: var(--surface); white-space: nowrap; }
+    .filters { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(150px, 190px) minmax(150px, 210px) auto auto auto; gap: 8px; align-items: end; margin: 12px 0 6px; }
+    .field { display: grid; gap: 4px; }
+    .field-label { color: var(--muted); font-size: 12px; line-height: 1.2; }
+    .list-tools, .profile-row { display: flex; gap: 6px; align-items: center; }
+    .list-tools select, .profile-row select { min-width: 0; flex: 1; }
+    #serviceFilter { min-width: 76px; }
+    .summary { min-height: 20px; margin: 0 0 8px; color: var(--muted); font-size: 12px; }
     .services { border: 1px solid var(--border); border-radius: 16px; background: var(--surface); overflow: clip; }
-    .service { display: grid; grid-template-columns: 34px minmax(180px, 1.25fr) minmax(130px, 0.7fr) minmax(220px, 1.2fr) minmax(118px, 0.55fr) auto; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--border); }
+    .service { display: grid; grid-template-columns: 34px minmax(220px, 1.15fr) minmax(160px, 0.72fr) minmax(300px, 1.35fr) 84px 220px; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--border); }
     .service:first-child { border-top: 0; }
     .service:hover { background: color-mix(in oklab, var(--elevated), transparent 30%); }
     .service.disabled { opacity: 0.68; }
@@ -31,9 +36,14 @@
     .name { min-width: 0; }
     .name strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .hosts { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .service select { min-width: 0; }
-    .row-actions { display: flex; gap: 6px; justify-content: flex-end; align-items: center; white-space: nowrap; }
-    .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 7px; background: var(--elevated); color: var(--muted); font-size: 12px; }
+    .service select { min-width: 0; width: 100%; }
+    .row-actions { display: contents; }
+    .action-buttons { display: flex; gap: 6px; justify-content: flex-end; align-items: center; white-space: nowrap; }
+    button.icon { width: 28px; min-width: 28px; height: 28px; padding: 0; border-color: transparent; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; }
+    button.icon.active { color: var(--primary); }
+    button.icon:hover { background: var(--elevated); border-color: var(--border); }
+    .badge { display: inline-flex; justify-content: center; align-items: center; width: 84px; min-height: 24px; border-radius: 999px; padding: 3px 7px; background: var(--elevated); color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .badge.na { color: var(--muted); }
     .ok { color: var(--success); } .bad { color: var(--error); } .warn { color: var(--warning); }
     details { margin-top: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 12px; }
     summary { cursor: pointer; font-weight: 650; }
@@ -42,7 +52,15 @@
     .muted { color: var(--muted); }
     ul { margin: 8px 0 0; padding-left: 18px; }
     pre, textarea { width: 100%; min-height: 150px; background: var(--bg); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; overflow: auto; }
-    @media (max-width: 940px) { header, .filters, .service { grid-template-columns: 1fr; } .toolbar, .row-actions { justify-content: flex-start; } .toggle { place-items: start; } }
+    dialog { width: min(520px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 16px; padding: 0; background: var(--bg); color: var(--ink); box-shadow: 0 18px 60px color-mix(in oklab, black, transparent 78%); }
+    dialog::backdrop { background: color-mix(in oklab, black, transparent 62%); }
+    .dialog-body { display: grid; gap: 12px; padding: 16px; }
+    .dialog-body h2 { margin: 0; }
+    .dialog-body label { display: grid; gap: 5px; color: var(--muted); }
+    .dialog-body label span { font-size: 12px; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+    .danger { color: var(--error); }
+    @media (max-width: 940px) { header, .filters, .service { grid-template-columns: 1fr; } .toolbar, .action-buttons { justify-content: flex-start; } .row-actions { display: flex; flex-wrap: wrap; gap: 6px; } .toggle { place-items: start; } }
   </style>
 </head>
 <body>
@@ -58,13 +76,9 @@
   <section aria-labelledby="servicesHeading">
     <h2 id="servicesHeading" data-i18n="services">Services</h2>
     <div class="filters">
-      <input id="serviceSearch" type="search" data-i18n-placeholder="searchServices" data-i18n-aria-label="searchServices" placeholder="Search services" aria-label="Search services">
-      <select id="serviceFilter" data-i18n-aria-label="filterServices" aria-label="Filter services">
-        <option value="all" data-i18n="allServices">All services</option>
-        <option value="enabled" data-i18n="enabledServices">Enabled services</option>
-        <option value="disabled" data-i18n="disabledServices">Disabled services</option>
-      </select>
-      <select id="profile" data-i18n-aria-label="profile" aria-label="Profile"></select>
+      <label class="field"><span class="field-label" data-i18n="searchServices">Search services</span><input id="serviceSearch" type="search" data-i18n-placeholder="searchServices" data-i18n-aria-label="searchServices" placeholder="Search services" aria-label="Search services"></label>
+      <div class="field"><span class="field-label">List</span><span class="list-tools"><button id="serviceFilter" class="small" type="button" aria-label="Filter services">☰ All</button><select id="sortOrder" aria-label="Sort services"><option value="smart">Smart order</option><option value="name">Name</option><option value="enabled">Enabled first</option><option value="health">Health</option></select></span></div>
+      <label class="field"><span class="field-label" data-i18n="profile">Profile</span><span class="profile-row"><select id="profile" data-i18n-aria-label="profile" aria-label="Profile"></select><button id="saveProfile" class="small" type="button">Save…</button></span></label>
       <button id="enableAll" data-i18n="enableAll">Enable all</button>
       <button id="disableAll" data-i18n="disableAll">Disable all</button>
       <button id="resetDefaults" data-i18n="resetDefaults">Reset defaults</button>
@@ -72,6 +86,21 @@
     <div id="serviceSummary" class="summary" aria-live="polite">—</div>
     <div id="services" class="services" aria-live="polite"></div>
   </section>
+
+  <dialog id="customDialog">
+    <form method="dialog" class="dialog-body">
+      <h2 id="customTitle">Custom instances</h2>
+      <p id="customHint" class="muted">Choose which frontend type this URL belongs to.</p>
+      <label><span>Frontend type</span><select id="customFrontendType"></select></label>
+      <label id="customFrontendNameRow" class="hidden"><span>New frontend type name</span><input id="customFrontendName" type="text" placeholder="e.g. Libreddit"></label>
+      <label><span>Instance URL</span><input id="customInstanceUrl" type="text" placeholder="https://example.com"></label>
+      <div class="dialog-actions">
+        <button id="removeCustomFrontend" class="danger" value="remove" type="button">Remove custom type</button>
+        <button value="cancel">Cancel</button>
+        <button id="saveCustom" class="primary" value="save" type="button">Save</button>
+      </div>
+    </form>
+  </dialog>
 
   <details open>
     <summary data-i18n="diagnostics">Diagnostics</summary>

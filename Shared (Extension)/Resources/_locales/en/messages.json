@@ -91,6 +91,7 @@
   "removeCustom": { "message": "Remove custom" },
   "shownEnabledSummary": { "message": "$SHOWN$/$TOTAL$ shown · $ENABLED$ enabled", "placeholders": { "shown": { "content": "$1" }, "total": { "content": "$2" }, "enabled": { "content": "$3" } } },
   "notChecked": { "message": "not checked" },
+  "notApplicable": { "message": "N/A" },
   "stale": { "message": "stale" },
   "failed": { "message": "failed" }
 }

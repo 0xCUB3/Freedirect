@@ -328,6 +328,7 @@ function defaultState() {
     schemaVersion: 1,
     globalEnabled: true,
     profile: 'balanced',
+    customProfiles: {},
     services,
     diagnostics: {
       lastGeneratedAt: null,
@@ -434,7 +435,7 @@ function sanitizeServiceConfig(serviceId, rawConfig, defaultConfig) {
     enabled: typeof config.enabled === 'boolean' ? config.enabled : defaultConfig.enabled,
     frontend,
     instance: instance && allowedInstances.has(instance) ? instance : defaultInstance,
-    mode: config.mode === 'rotating' ? 'rotating' : 'selected',
+    mode: 'selected',
     customInstances,
     customFrontends,
     favoriteInstances,
@@ -467,7 +468,7 @@ function sanitizeServiceUpdate(serviceId, currentConfig, patch) {
     enabled: input.enabled === undefined ? Boolean(currentConfig.enabled) : Boolean(input.enabled),
     frontend,
     instance: requestedInstance && allowedInstances.has(requestedInstance) ? requestedInstance : (currentInstance && allowedInstances.has(currentInstance) ? currentInstance : defaultInstance),
-    mode: input.mode === undefined ? (currentConfig.mode === 'rotating' ? 'rotating' : 'selected') : (input.mode === 'rotating' ? 'rotating' : 'selected'),
+    mode: 'selected',
     customInstances,
     customFrontends,
     favoriteInstances,
@@ -485,7 +486,9 @@ function migrateState(rawState) {
   const state = { ...defaults }
   state.schemaVersion = defaults.schemaVersion
   state.globalEnabled = typeof input.globalEnabled === 'boolean' ? input.globalEnabled : defaults.globalEnabled
-  state.profile = input.profile in PROFILES ? input.profile : defaults.profile
+  state.customProfiles = input.customProfiles && typeof input.customProfiles === 'object' && !Array.isArray(input.customProfiles) ? Object.fromEntries(Object.entries(input.customProfiles).map(([id, profile]) => [String(id).slice(0, 40), { name: String(profile?.name || id).slice(0, 80), enabledServices: sanitizeStringArray(profile?.enabledServices, value => String(value)).filter(id => id in SERVICE_CATALOG) }]).filter(([, profile]) => profile.enabledServices.length)) : {}
+  const allProfiles = { ...PROFILES, ...state.customProfiles }
+  state.profile = input.profile in allProfiles ? input.profile : defaults.profile
   state.services = {}
   for (const [serviceId, serviceDefaults] of Object.entries(defaults.services)) {
     state.services[serviceId] = sanitizeServiceConfig(serviceId, input.services?.[serviceId], serviceDefaults)
@@ -591,10 +594,6 @@ function selectedInstance(serviceId, state) {
   const frontendId = config.frontend in frontends ? config.frontend : service.defaultFrontend
   const frontend = frontends[frontendId]
   const candidates = [...(config.favoriteInstances ?? []), ...(config.customInstances ?? []), ...frontend.instances]
-  if (config.mode === 'rotating') {
-    const day = Math.floor(Date.now() / 86400000)
-    return candidates[day % candidates.length]
-  }
   return config.instance || candidates[0]
 }
 
@@ -809,9 +808,10 @@ function reverseUrl(urlString, state) {
 }
 
 function applyProfile(state, profileId) {
-  if (!(profileId in PROFILES)) throw new Error('Unknown profile')
+  const profiles = { ...PROFILES, ...(state.customProfiles ?? {}) }
+  if (!(profileId in profiles)) throw new Error('Unknown profile')
   state.profile = profileId
-  const profile = PROFILES[profileId]
+  const profile = profiles[profileId]
   if (profile.enabledServices === 'all') {
     for (const serviceId of Object.keys(state.services)) state.services[serviceId].enabled = true
   } else if (Array.isArray(profile.enabledServices)) {
@@ -849,21 +849,41 @@ async function checkInstanceHealth(serviceId, instance) {
   } catch (error) {
     health = { ok: false, status: null, latencyMs: null, checkedAt: new Date().toISOString(), error: String(error?.message ?? error) }
   }
-  state.services[serviceId].health = { ...(state.services[serviceId].health ?? {}), [origin]: health }
-  state.diagnostics.lastHealthCheckAt = health.checkedAt
-  state.diagnostics.lastHealthError = health.ok ? null : health.error
-  await saveState(state)
+  const latest = await getState()
+  latest.services[serviceId].health = { ...(latest.services[serviceId].health ?? {}), [origin]: health }
+  latest.diagnostics.lastHealthCheckAt = health.checkedAt
+  latest.diagnostics.lastHealthError = health.ok ? null : health.error
+  await saveState(latest)
   return health
 }
 
 async function checkAllSelectedHealth() {
   const state = await getState()
+  const entries = Object.entries(state.services).filter(([, config]) => config.enabled)
+  const checkedAt = new Date().toISOString()
   const results = {}
-  for (const [serviceId, config] of Object.entries(state.services)) {
-    if (!config.enabled) continue
+  await Promise.all(entries.map(async ([serviceId]) => {
+    const service = SERVICE_CATALOG[serviceId]
     const instance = selectedInstance(serviceId, state)
-    results[serviceId] = await checkInstanceHealth(serviceId, instance)
+    const frontend = serviceFrontends(service, state.services[serviceId])[state.services[serviceId].frontend]
+    if (frontend?.appProtocol) {
+      results[serviceId] = { ok: true, status: null, latencyMs: null, checkedAt, error: null }
+      return
+    }
+    try {
+      const result = await fetchWithTimeout(instance)
+      results[serviceId] = { ok: result.ok, status: result.status, latencyMs: result.latencyMs, checkedAt, error: null }
+    } catch (error) {
+      results[serviceId] = { ok: false, status: null, latencyMs: null, checkedAt, error: String(error?.message ?? error) }
+    }
+  }))
+  for (const [serviceId, health] of Object.entries(results)) {
+    const instance = selectedInstance(serviceId, state)
+    state.services[serviceId].health = { ...(state.services[serviceId].health ?? {}), [instance]: health }
   }
+  state.diagnostics.lastHealthCheckAt = checkedAt
+  state.diagnostics.lastHealthError = Object.values(results).find(result => !result.ok)?.error ?? null
+  await saveState(state)
   return results
 }
 
@@ -946,8 +966,9 @@ async function selectBestInstance(serviceId) {
   if (!candidates.length) throw new Error('No instances available')
   if (frontend.appProtocol) {
     const best = { ok: true, status: null, latencyMs: null, checkedAt: new Date().toISOString(), error: null }
-    state.services[serviceId] = sanitizeServiceUpdate(serviceId, config, { instance: candidates[0], mode: 'selected' })
-    await saveState(state)
+    const latest = await getState()
+    latest.services[serviceId] = sanitizeServiceUpdate(serviceId, latest.services[serviceId], { instance: candidates[0], mode: 'selected' })
+    await saveState(latest)
     await rebuildRules()
     return { serviceId, instance: candidates[0], health: best, checked: 1 }
   }
@@ -965,11 +986,12 @@ async function selectBestInstance(serviceId) {
     }
   }))
   if (!best) throw new Error('No reachable instance found')
-  state.services[serviceId] = sanitizeServiceUpdate(serviceId, config, { instance: best.instance, mode: 'selected' })
-  state.services[serviceId].health = health
-  state.diagnostics.lastHealthCheckAt = checkedAt
-  state.diagnostics.lastHealthError = null
-  await saveState(state)
+  const latest = await getState()
+  latest.services[serviceId] = sanitizeServiceUpdate(serviceId, latest.services[serviceId], { instance: best.instance, mode: 'selected' })
+  latest.services[serviceId].health = { ...(latest.services[serviceId].health ?? {}), ...health }
+  latest.diagnostics.lastHealthCheckAt = checkedAt
+  latest.diagnostics.lastHealthError = null
+  await saveState(latest)
   await rebuildRules()
   return { serviceId, instance: best.instance, health: best.health, checked: candidates.length }
 }
@@ -1339,7 +1361,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const state = await getState()
     switch (message?.type) {
       case 'getState':
-        return { state, catalog: SERVICE_CATALOG, profiles: PROFILES, limitations: RESEARCHED_LIMITATIONS, permissions: await permissionState(), activeTabPermissions: await activeTabPermissionState() }
+        return { state, catalog: SERVICE_CATALOG, profiles: { ...PROFILES, ...(state.customProfiles ?? {}) }, limitations: RESEARCHED_LIMITATIONS, permissions: await permissionState(), activeTabPermissions: await activeTabPermissionState() }
       case 'setGlobalEnabled': {
         state.globalEnabled = Boolean(message.enabled)
         await saveState(state)
@@ -1350,8 +1372,19 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'updateService': {
         const service = state.services[message.serviceId]
         if (!service) throw new Error('Unknown service')
+        const wasEnabled = Boolean(service.enabled)
+        const wantsEnabled = message.patch?.enabled === true
         state.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, service, message.patch)
         await saveState(state)
+        if (wantsEnabled) {
+          if (!wasEnabled) {
+            try { await selectBestInstance(message.serviceId) } catch { await checkInstanceHealth(message.serviceId, state.services[message.serviceId].instance).catch(() => null) }
+          } else {
+            const instance = state.services[message.serviceId].instance
+            const health = await checkInstanceHealth(message.serviceId, instance).catch(() => ({ ok: false }))
+            if (!health?.ok) await selectBestInstance(message.serviceId).catch(() => null)
+          }
+        }
         const diagnostics = await rebuildRules()
         await updateCurrentActionIcon()
         return { diagnostics }
@@ -1363,8 +1396,18 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await updateCurrentActionIcon()
         return { diagnostics }
       }
+      case 'saveProfile': {
+        const name = String(message.name || '').trim().slice(0, 80)
+        if (!name) throw new Error('Profile needs a name')
+        const id = `custom-${Date.now()}`
+        state.customProfiles = { ...(state.customProfiles ?? {}), [id]: { name, enabledServices: Object.entries(state.services).filter(([, config]) => config.enabled).map(([serviceId]) => serviceId) } }
+        state.profile = id
+        await saveState(state)
+        return { profile: id }
+      }
       case 'setAllServices': {
-        for (const service of Object.values(state.services)) service.enabled = Boolean(message.enabled)
+        const enabled = Boolean(message.enabled)
+        for (const service of Object.values(state.services)) service.enabled = enabled
         state.profile = 'manual'
         await saveState(state)
         const diagnostics = await rebuildRules()
