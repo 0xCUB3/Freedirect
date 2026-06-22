@@ -239,11 +239,18 @@ const api = globalThis.chrome ?? globalThis.browser
   $('disableAll').addEventListener('click', event => runButtonAction(event.currentTarget, 'Disabling…', () => msg('setAllServices', { enabled: false })))
   $('resetDefaults').addEventListener('click', () => { if (confirm('Reset Freedirect settings to defaults?')) msg('resetState').then(refresh) })
   $('serviceSearch').addEventListener('input', () => { if (current) render(current) })
+  function updateServiceFilterButton() {
+    const label = serviceFilter === 'all' ? 'Showing all services' : serviceFilter === 'enabled' ? 'Showing enabled services' : 'Showing disabled services'
+    $('serviceFilter').setAttribute('aria-label', label)
+    $('serviceFilter').title = label
+    $('serviceFilter').classList.toggle('active', serviceFilter !== 'all')
+  }
   $('serviceFilter').addEventListener('click', () => {
     serviceFilter = serviceFilter === 'all' ? 'enabled' : serviceFilter === 'enabled' ? 'disabled' : 'all'
-    $('serviceFilter').textContent = serviceFilter === 'all' ? '☰ All' : serviceFilter === 'enabled' ? '☰ On' : '☰ Off'
+    updateServiceFilterButton()
     if (current) render(current)
   })
+  updateServiceFilterButton()
   $('sortOrder').addEventListener('change', () => { if (current) render(current) })
   $('services').addEventListener('change', async event => {
     const row = event.target.closest('.service')

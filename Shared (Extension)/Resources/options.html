@@ -20,13 +20,20 @@
     button.small { padding: 5px 8px; font-size: 12px; }
     button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid color-mix(in oklab, var(--primary), white 45%); outline-offset: 2px; }
     .toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; align-items: center; }
-    .filters { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(150px, 190px) minmax(150px, 210px) auto auto auto; gap: 8px; align-items: end; margin: 12px 0 6px; }
+    .filters { display: grid; grid-template-columns: minmax(230px, 1fr) auto auto auto; gap: 8px; align-items: end; margin: 12px 0 8px; }
     .field { display: grid; gap: 4px; }
     .field-label { color: var(--muted); font-size: 12px; line-height: 1.2; }
-    .list-tools, .profile-row { display: flex; gap: 6px; align-items: center; }
-    .list-tools select, .profile-row select { min-width: 0; flex: 1; }
-    #serviceFilter { min-width: 76px; }
-    .summary { min-height: 20px; margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+    .profile-row, .list-meta { display: flex; gap: 6px; align-items: center; }
+    .profile-control { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+    .profile-row select { min-width: 120px; max-width: 180px; }
+    .filter-button { width: 28px; min-width: 28px; height: 28px; padding: 0; border-color: transparent; background: transparent; color: var(--muted); border-radius: 8px; line-height: 1; }
+    .filter-button svg { display: block; margin: auto; }
+    .filter-button:hover, .filter-button.active { background: var(--elevated); border-color: var(--border); color: var(--ink); }
+    .list-meta { justify-content: space-between; min-height: 28px; margin: 0 0 8px; }
+    .summary { color: var(--muted); font-size: 12px; }
+    .list-controls { display: inline-flex; align-items: center; gap: 4px; }
+    .sort-control { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .sort-control select { padding: 5px 26px 5px 8px; border-radius: 8px; font-size: 12px; }
     .services { border: 1px solid var(--border); border-radius: 16px; background: var(--surface); overflow: clip; }
     .service { display: grid; grid-template-columns: 34px minmax(220px, 1.15fr) minmax(160px, 0.72fr) minmax(300px, 1.35fr) 84px 220px; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--border); }
     .service:first-child { border-top: 0; }
@@ -60,7 +67,7 @@
     .dialog-body label span { font-size: 12px; }
     .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
     .danger { color: var(--error); }
-    @media (max-width: 940px) { header, .filters, .service { grid-template-columns: 1fr; } .toolbar, .action-buttons { justify-content: flex-start; } .row-actions { display: flex; flex-wrap: wrap; gap: 6px; } .toggle { place-items: start; } }
+    @media (max-width: 940px) { header, .filters, .service { grid-template-columns: 1fr; } .list-meta { align-items: flex-start; flex-direction: column; } .toolbar, .action-buttons { justify-content: flex-start; } .profile-control { align-items: flex-start; flex-direction: column; } .row-actions { display: flex; flex-wrap: wrap; gap: 6px; } .toggle { place-items: start; } }
   </style>
 </head>
 <body>
@@ -68,6 +75,7 @@
   <header>
     <h1 data-i18n="optionsTitle">Freedirect Settings</h1>
     <div class="toolbar">
+      <label class="profile-control"><span data-i18n="profile">Profile</span><span class="profile-row"><select id="profile" data-i18n-aria-label="profile" aria-label="Profile"></select><button id="saveProfile" class="small" type="button">Save…</button></span></label>
       <button id="refreshInstances" data-i18n="refreshInstances">Update instance lists</button>
       <button id="rebuild" class="primary" data-i18n="rebuildRules">Rebuild rules</button>
     </div>
@@ -76,14 +84,18 @@
   <section aria-labelledby="servicesHeading">
     <h2 id="servicesHeading" data-i18n="services">Services</h2>
     <div class="filters">
-      <label class="field"><span class="field-label" data-i18n="searchServices">Search services</span><input id="serviceSearch" type="search" data-i18n-placeholder="searchServices" data-i18n-aria-label="searchServices" placeholder="Search services" aria-label="Search services"></label>
-      <div class="field"><span class="field-label">List</span><span class="list-tools"><button id="serviceFilter" class="small" type="button" aria-label="Filter services">☰ All</button><select id="sortOrder" aria-label="Sort services"><option value="smart">Smart order</option><option value="name">Name</option><option value="enabled">Enabled first</option><option value="health">Health</option></select></span></div>
-      <label class="field"><span class="field-label" data-i18n="profile">Profile</span><span class="profile-row"><select id="profile" data-i18n-aria-label="profile" aria-label="Profile"></select><button id="saveProfile" class="small" type="button">Save…</button></span></label>
+      <input id="serviceSearch" type="search" data-i18n-placeholder="searchServices" data-i18n-aria-label="searchServices" placeholder="Search services" aria-label="Search services">
       <button id="enableAll" data-i18n="enableAll">Enable all</button>
       <button id="disableAll" data-i18n="disableAll">Disable all</button>
       <button id="resetDefaults" data-i18n="resetDefaults">Reset defaults</button>
     </div>
-    <div id="serviceSummary" class="summary" aria-live="polite">—</div>
+    <div class="list-meta">
+      <div id="serviceSummary" class="summary" aria-live="polite">—</div>
+      <div class="list-controls">
+        <button id="serviceFilter" class="filter-button" type="button" aria-label="Showing all services" title="Showing all services"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 3.5h12L9.4 8.7v3.8l-2.8 1V8.7L2 3.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
+        <label class="sort-control">Order <select id="sortOrder" aria-label="Sort services"><option value="smart">Smart</option><option value="name">Name</option><option value="enabled">Enabled first</option><option value="health">Health</option></select></label>
+      </div>
+    </div>
     <div id="services" class="services" aria-live="polite"></div>
   </section>
 

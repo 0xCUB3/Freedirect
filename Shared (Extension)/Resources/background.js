@@ -242,27 +242,33 @@ Object.assign(SERVICE_CATALOG, {
   youtubeMusic: simpleService('YouTube Music', ['music.youtube.com'], 'hyperpipe', 'Hyperpipe', ['https://hyperpipe.surge.sh']),
   chatGpt: simpleService('ChatGPT', ['chatgpt.com', 'chat.openai.com'], 'duckDuckGoAiChat', 'DuckDuckGo AI Chat', ['https://duck.ai']),
   bluesky: simpleService('Bluesky', ['bsky.app', 'www.bsky.app'], 'skyview', 'Skyview', ['https://skyview.social']),
-  tumblr: simpleService('Tumblr', ['tumblr.com', 'www.tumblr.com'], 'priviblur', 'Priviblur', ['https://priviblur.fly.dev']),
-  twitch: simpleService('Twitch', ['twitch.tv', 'www.twitch.tv', 'm.twitch.tv'], 'safetwitch', 'SafeTwitch', ['https://safetwitch.drgns.space']),
-  bilibili: simpleService('Bilibili', ['bilibili.com', 'www.bilibili.com'], 'mikuInvidious', 'MikuInvidious', ['https://mikuinv.resrv.org']),
-  pixiv: simpleService('Pixiv', ['pixiv.net', 'www.pixiv.net'], 'pixivFe', 'PixivFE', ['https://pixivfe.exozy.me']),
-  imgur: simpleService('Imgur', ['imgur.com', 'www.imgur.com', 'i.imgur.com'], 'rimgo', 'Rimgo', ['https://rimgo.lunar.icu']),
-  pinterest: simpleService('Pinterest', ['pinterest.com', 'www.pinterest.com'], 'binternet', 'Binternet', ['https://binternet.ahwx.org']),
-  soundcloud: simpleService('SoundCloud', ['soundcloud.com', 'www.soundcloud.com'], 'tuboSoundcloud', 'Tubo', ['https://tubo.migalmoreno.com']),
+  tumblr: simpleService('Tumblr', ['tumblr.com', 'www.tumblr.com'], 'priviblur', 'Priviblur', ['https://pb.bloat.cat', 'https://priviblur.canine.tools', 'https://priviblur.pussthecat.org']),
+  twitch: simpleService('Twitch', ['twitch.tv', 'www.twitch.tv', 'm.twitch.tv'], 'safetwitch', 'SafeTwitch', ['https://ttv.vern.cc', 'https://twitch.sudovanilla.org', 'https://safetwitch.adminforge.de']),
+  pixiv: simpleService('Pixiv', ['pixiv.net', 'www.pixiv.net'], 'pixivFe', 'PixivFE', ['https://pixivfe.darkness.services', 'https://pixiv.perennialte.ch']),
+  imgur: simpleService('Imgur', ['imgur.com', 'www.imgur.com', 'i.imgur.com'], 'rimgo', 'Rimgo', ['https://rimgo.catsarch.com', 'https://imgur.artemislena.eu', 'https://rimgo.pussthecat.org']),
+  pinterest: simpleService('Pinterest', ['pinterest.com', 'www.pinterest.com'], 'binternet', 'Binternet', ['https://bn.bloat.cat', 'https://bn.opnxng.com', 'https://binternet.privacyredirect.com']),
+  soundcloud: simpleService('SoundCloud', ['soundcloud.com', 'www.soundcloud.com'], 'tuboSoundcloud', 'Tubo', ['https://tubo.reallyaweso.me']),
   bandcamp: simpleService('Bandcamp', ['bandcamp.com', 'www.bandcamp.com'], 'tent', 'Tent', ['https://tent.sny.sh']),
-  tekstowo: simpleService('Tekstowo', ['tekstowo.pl', 'www.tekstowo.pl'], 'tekstoLibre', 'TekstoLibre', ['https://tekstolibre.sny.sh']),
+  tekstowo: {
+    name: 'Tekstowo',
+    confidence: 'starter',
+    originalHosts: ['tekstowo.pl', 'www.tekstowo.pl'],
+    defaultFrontend: 'tekstoLibre',
+    frontends: { tekstoLibre: { name: 'TekstoLibre', instances: ['https://davilarek.github.io'] } },
+    rules: [{ source: '^https?://(www\\.)?tekstowo\\.pl/?(.*)', path: '/TekstoLibre/$2' }]
+  },
   genius: simpleService('Genius', ['genius.com', 'www.genius.com'], 'dumb', 'Dumb', ['https://dm.vern.cc']),
   quora: simpleService('Quora', ['quora.com', 'www.quora.com'], 'quetre', 'Quetre', ['https://quetre.iket.me']),
   github: simpleService('GitHub', ['github.com', 'www.github.com'], 'gothub', 'GotHub', ['https://gh.vern.cc']),
   gitlab: simpleService('GitLab', ['gitlab.com', 'www.gitlab.com'], 'laboratory', 'Laboratory', ['https://lab.vern.cc']),
   stackOverflow: simpleService('Stack Overflow', ['stackoverflow.com', 'www.stackoverflow.com', 'stackexchange.com'], 'anonymousOverflow', 'AnonymousOverflow', ['https://ao.vern.cc']),
-  reuters: simpleService('Reuters', ['reuters.com', 'www.reuters.com'], 'neuters', 'Neuters', ['https://neuters.de']),
+  reuters: simpleService('Reuters', ['reuters.com', 'www.reuters.com'], 'neuters', 'Neuters', ['https://nu.vern.cc']),
   snopes: simpleService('Snopes', ['snopes.com', 'www.snopes.com'], 'suds', 'Suds', ['https://sd.vern.cc']),
   ifunny: simpleService('iFunny', ['ifunny.co', 'www.ifunny.co'], 'unfunny', 'Unfunny', ['https://uf.vern.cc']),
   tenor: simpleService('Tenor', ['tenor.com', 'www.tenor.com'], 'soprano', 'Soprano', ['https://sp.vern.cc']),
   knowyourmeme: simpleService('Know Your Meme', ['knowyourmeme.com', 'www.knowyourmeme.com'], 'meme', 'Meme', ['https://meme.vern.cc']),
   urbanDictionary: simpleService('Urban Dictionary', ['urbandictionary.com', 'www.urbandictionary.com'], 'ruralDictionary', 'Rural Dictionary', ['https://rd.vern.cc']),
-  goodreads: simpleService('Goodreads', ['goodreads.com', 'www.goodreads.com'], 'biblioReads', 'BiblioReads', ['https://biblioreads.ml']),
+  goodreads: simpleService('Goodreads', ['goodreads.com', 'www.goodreads.com'], 'biblioReads', 'BiblioReads', ['https://biblioreads.eu.org', 'https://biblioreads.mooo.com', 'https://read.seitan-ayoub.lol']),
   wolframAlpha: simpleService('WolframAlpha', ['wolframalpha.com', 'www.wolframalpha.com'], 'wolfreeAlpha', 'WolfreeAlpha', ['https://wolfreealpha.gitlab.io']),
   instructables: simpleService('Instructables', ['instructables.com', 'www.instructables.com'], 'structables', 'Structables', ['https://structables.private.coffee']),
   waybackMachine: simpleService('Wayback Machine', ['web.archive.org'], 'waybackClassic', 'Wayback Classic', ['https://web.archive.org']),
@@ -276,7 +282,7 @@ Object.assign(SERVICE_CATALOG, {
   ultimateGuitar: simpleService('Ultimate Guitar', ['ultimate-guitar.com', 'www.ultimate-guitar.com'], 'freetar', 'Freetar', ['https://freetar.de']),
   baiduTieba: simpleService('Baidu Tieba', ['tieba.baidu.com'], 'ratAintTieba', 'RatAintTieba', ['https://rat.vern.cc']),
   threads: simpleService('Threads', ['threads.net', 'www.threads.net'], 'shoelace', 'Shoelace', ['https://shoelace.vern.cc']),
-  deviantArt: simpleService('DeviantArt', ['deviantart.com', 'www.deviantart.com'], 'skunkyArt', 'SkunkyArt', ['https://skunkyart.frontendfriendly.xyz']),
+  deviantArt: simpleService('DeviantArt', ['deviantart.com', 'www.deviantart.com'], 'skunkyArt', 'SkunkyArt', ['https://art.bloat.cat', 'https://da.opnxng.com']),
   geeksForGeeks: simpleService('GeeksForGeeks', ['geeksforgeeks.org', 'www.geeksforgeeks.org'], 'nerdsForNerds', 'NerdsForNerds', ['https://nerds.vern.cc']),
   coub: simpleService('Coub', ['coub.com', 'www.coub.com'], 'koub', 'Koub', ['https://koub.vern.cc']),
   chefkoch: simpleService('Chefkoch', ['chefkoch.de', 'www.chefkoch.de'], 'gocook', 'GoCook', ['https://gocook.vern.cc'])
@@ -828,7 +834,8 @@ async function fetchWithTimeout(url, timeout = HEALTH_TIMEOUT_MS) {
   const started = performance.now()
   try {
     const response = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal })
-    return { ok: response.ok || response.type === 'opaque', status: response.status || null, latencyMs: Math.round(performance.now() - started), response }
+    const reachable = response.ok || response.type === 'opaque' || (response.status >= 400 && response.status < 500)
+    return { ok: reachable, status: response.status || null, latencyMs: Math.round(performance.now() - started), response }
   } finally {
     clearTimeout(timer)
   }

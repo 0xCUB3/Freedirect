@@ -23,7 +23,7 @@ const samples = JSON.parse(readFileSync('scripts/service-test-cases.json', 'utf8
 
 const errors = []
 const ids = Object.keys(catalog)
-if (ids.length !== 52) errors.push(`expected 52 service groups, got ${ids.length}`)
+if (ids.length !== 51) errors.push(`expected 51 service groups, got ${ids.length}`)
 const highCount = Object.values(catalog).filter(service => service.confidence === 'high').length
 if (highCount !== 11) errors.push(`expected 11 high-confidence groups, got ${highCount}`)
 
