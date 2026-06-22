@@ -246,6 +246,7 @@ const SERVICE_CATALOG = {
     name: 'Fandom',
     confidence: 'high',
     originalHosts: ['fandom.com', 'www.fandom.com'],
+    sampleUrl: 'https://minecraft.fandom.com/wiki/Minecraft_Wiki',
     defaultFrontend: 'breezeWiki',
     frontends: { breezeWiki: { name: 'BreezeWiki', instances: ['https://breezewiki.com', 'https://antifandom.com'] } },
     rules: [{ source: '^https?://([^./]+)\\.fandom\\.com/wiki/(.*)', path: '/$1/wiki/$2' }]
@@ -740,21 +741,34 @@ async function rebuildRules() {
   const validation = await supportedDnrRules(requestedRules)
   const addRules = validation.rules
   const metadataById = new Map(records.map(record => [record.rule.id, record]))
+  const rejectedRules = validation.rejected.map(rejected => ({ id: rejected.id, reason: rejected.reason || 'unsupported regex' }))
   const diagnostics = { lastGeneratedAt: new Date().toISOString(), lastRuleCount: 0, lastRejectedRules: [], lastError: null }
   try {
     await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds, addRules })
     diagnostics.lastRuleCount = addRules.length
-    diagnostics.lastRejectedRules = validation.rejected.map(rejected => ({
-      id: rejected.id,
-      serviceId: metadataById.get(rejected.id)?.serviceId || null,
-      serviceName: metadataById.get(rejected.id)?.serviceName || null,
-      source: metadataById.get(rejected.id)?.source || null,
-      reason: rejected.reason || 'unsupported regex'
-    }))
-    diagnostics.lastError = validation.rejected.length ? `${validation.rejected.length} unsupported redirect rules were skipped.` : null
   } catch (error) {
-    diagnostics.lastError = String(error?.message ?? error)
+    try {
+      await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds, addRules: [] })
+      for (const rule of addRules) {
+        try {
+          await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: [], addRules: [rule] })
+          diagnostics.lastRuleCount += 1
+        } catch (ruleError) {
+          rejectedRules.push({ id: rule.id, reason: String(ruleError?.message ?? ruleError) })
+        }
+      }
+    } catch (fallbackError) {
+      diagnostics.lastError = String(fallbackError?.message ?? fallbackError ?? error)
+    }
   }
+  diagnostics.lastRejectedRules = rejectedRules.map(rejected => ({
+    id: rejected.id,
+    serviceId: metadataById.get(rejected.id)?.serviceId || null,
+    serviceName: metadataById.get(rejected.id)?.serviceName || null,
+    source: metadataById.get(rejected.id)?.source || null,
+    reason: rejected.reason || 'unsupported regex'
+  }))
+  if (!diagnostics.lastError && diagnostics.lastRejectedRules.length) diagnostics.lastError = `${diagnostics.lastRejectedRules.length} dynamic redirect rules were skipped.`
   return await withStateWrite(latest => {
     latest.diagnostics = { ...latest.diagnostics, ...diagnostics }
     return latest.diagnostics
@@ -948,7 +962,7 @@ async function runSanityCheck() {
   const notes = []
   const checks = []
   const installedRuleCount = dynamicRules.length
-  const acceptedRuleCount = state.diagnostics.lastRuleCount || installedRuleCount
+  const acceptedRuleCount = state.diagnostics.lastGeneratedAt ? state.diagnostics.lastRuleCount : installedRuleCount
   const skippedUnsupported = /unsupported redirect rules were skipped/i.test(state.diagnostics.lastError || '')
   checks.push({ name: 'Global redirect switch', ok: state.globalEnabled, detail: state.globalEnabled ? 'enabled' : 'disabled' })
   checks.push({ name: 'Safari permission visibility', ok: true, detail: permission.available ? (permission.allUrls ? 'all-sites visible' : 'not visible to extension API') : permission.reason })
@@ -967,7 +981,7 @@ async function runSanityCheck() {
     const frontend = frontends[frontendId]
     const instance = selectedInstance(serviceId, state)
     const templates = frontend.rules ?? service.rules
-    const sample = `https://${service.originalHosts[0]}/`
+    const sample = service.sampleUrl || `https://${service.originalHosts[0]}/`
     const diagnosis = diagnoseUrl(sample, state)
     const health = config.health?.[instance] ?? null
     const hasRule = frontend.appProtocol || generated.some(rule => rule.serviceId === serviceId)

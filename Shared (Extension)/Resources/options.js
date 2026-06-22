@@ -303,12 +303,20 @@ const api = globalThis.chrome ?? globalThis.browser
     const serviceId = row.dataset.service
     const instance = row.querySelector('[data-field="instance"]').value
     if (button.dataset.action === 'best') {
-      await runButtonAction(button, 'Finding best…', async () => {
-        setRowHealthText(serviceId, 'finding best…', 'warn')
-        await nextPaint()
+      button.disabled = true
+      button.setAttribute('aria-busy', 'true')
+      setRowHealthText(serviceId, 'finding best…', 'warn')
+      await nextPaint()
+      try {
         const result = await msg('selectBestInstance', { serviceId })
         setRowInstance(serviceId, result?.best?.instance)
-      })
+        await refresh()
+      } catch (error) {
+        alert(error?.message || String(error))
+      } finally {
+        button.disabled = false
+        button.removeAttribute('aria-busy')
+      }
       return
     }
     try {
