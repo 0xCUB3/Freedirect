@@ -965,12 +965,45 @@ async function redirectCurrent() {
   return redirected
 }
 
+async function allowOriginalUrl(tabId, url) {
+  const original = safeHttpUrl(url)
+  if (!original) return null
+  const existing = await callApi(api.declarativeNetRequest, 'getSessionRules')
+  const id = SESSION_RULE_ID_BASE + Math.max(1, Number(tabId || 1))
+  const removeRuleIds = existing.filter(rule => rule.id === id).map(rule => rule.id)
+  const rule = {
+    id,
+    priority: 100,
+    action: { type: 'allowAllRequests' },
+    condition: { regexFilter: `^${escapeRegex(original)}$`, resourceTypes: ['main_frame'] }
+  }
+  await callApi(api.declarativeNetRequest, 'updateSessionRules', { removeRuleIds, addRules: [rule] })
+  const state = await getState()
+  state.diagnostics.bypassedUrls = [original, ...(state.diagnostics.bypassedUrls ?? []).filter(value => value !== original)].slice(0, 20)
+  await saveState(state)
+  return original
+}
+
+async function openOriginalInTab(tabId, original) {
+  const allowed = await allowOriginalUrl(tabId, original)
+  if (allowed) await callApi(api.tabs, 'update', tabId, { url: allowed })
+  return allowed
+}
+
+async function openOriginalInNewTab(original) {
+  const safeOriginal = safeHttpUrl(original)
+  if (!safeOriginal) return null
+  const created = await callApi(api.tabs, 'create', { url: 'about:blank', active: true })
+  if (created?.id !== undefined) return openOriginalInTab(created.id, safeOriginal)
+  return callApi(api.tabs, 'create', { url: safeOriginal })
+}
+
 async function reverseCurrent() {
   const tab = await activeTab()
   if (!tab?.url) return null
   const state = await getState()
   const reversed = reverseUrl(tab.url, state)
-  if (reversed) await callApi(api.tabs, 'update', tab.id, { url: reversed })
+  if (reversed) await openOriginalInTab(tab.id, reversed)
   return reversed
 }
 
@@ -997,19 +1030,10 @@ async function bypassCurrent() {
   if (!tab?.url) return null
   const existing = await callApi(api.declarativeNetRequest, 'getSessionRules')
   const removeRuleIds = existing.filter(rule => rule.id >= SESSION_RULE_ID_BASE).map(rule => rule.id)
-  const id = SESSION_RULE_ID_BASE + Math.max(1, Number(tab.id || 1))
-  const rule = {
-    id,
-    priority: 100,
-    action: { type: 'allowAllRequests' },
-    condition: { regexFilter: `^${escapeRegex(tab.url)}$`, resourceTypes: ['main_frame'] }
-  }
-  await callApi(api.declarativeNetRequest, 'updateSessionRules', { removeRuleIds, addRules: [rule] })
-  const state = await getState()
-  state.diagnostics.bypassedUrls = [tab.url, ...(state.diagnostics.bypassedUrls ?? [])].slice(0, 20)
-  await saveState(state)
-  await callApi(api.tabs, 'reload', tab.id)
-  return tab.url
+  if (removeRuleIds.length) await callApi(api.declarativeNetRequest, 'updateSessionRules', { removeRuleIds, addRules: [] })
+  const allowed = await allowOriginalUrl(tab.id, tab.url)
+  if (allowed) await callApi(api.tabs, 'reload', tab.id)
+  return allowed
 }
 
 async function clearBypasses() {
@@ -1137,11 +1161,11 @@ api.contextMenus?.onClicked?.addListener(async (info, tab) => {
   }
   if (info.menuItemId === 'freedirect-reverse') {
     const reversed = reverseUrl(url, state)
-    if (reversed) return callApi(api.tabs, 'update', tab.id, { url: reversed })
+    if (reversed) return openOriginalInTab(tab.id, reversed)
   }
   if (info.menuItemId === 'freedirect-reverse-new-tab') {
     const reversed = reverseUrl(url, state)
-    if (reversed) return callApi(api.tabs, 'create', { url: reversed })
+    if (reversed) return openOriginalInNewTab(reversed)
   }
 })
 
