@@ -143,6 +143,8 @@ for (const [input, expected] of redirectSamples) {
 }
 const diagnosis = await send({ type: 'diagnoseUrl', url: 'https://www.youtube.com/watch?v=test' })
 if (diagnosis.diagnosis.serviceId !== 'youtube' || diagnosis.diagnosis.redirectUrl !== 'https://inv.thepixora.com/watch?v=test&local=false') throw new Error('Expected YouTube URL diagnosis')
+const batchDiagnosis = await send({ type: 'diagnoseUrls', urls: ['https://www.youtube.com/watch?v=test', 'https://www.reddit.com/r/privacy/', 'https://example.com/'] })
+if (batchDiagnosis.diagnoses?.[0]?.redirectUrl !== 'https://inv.thepixora.com/watch?v=test&local=false' || batchDiagnosis.diagnoses?.[1]?.redirectUrl !== 'https://redlib.net/r/privacy/' || batchDiagnosis.diagnoses?.[2]?.reason !== 'no-match') throw new Error('Expected batched URL diagnosis')
 const currentDiagnosis = await send({ type: 'diagnoseCurrent' })
 if (currentDiagnosis.diagnosis.serviceId !== 'youtube') throw new Error('Expected current tab diagnosis')
 

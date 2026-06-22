@@ -81,6 +81,97 @@ function redditRedirect(url, state) {
   return target !== href ? target : null
 }
 
+function unwrappedOutboundUrl(href) {
+  let url
+  try { url = new URL(href, location.href) } catch { return null }
+  if (!/^https?:$/.test(url.protocol)) return null
+  if (/^(www\.)?google\./.test(url.hostname) && /^\/(url|search)$/.test(url.pathname)) {
+    const nested = url.searchParams.get('url') || url.searchParams.get('q')
+    if (nested) {
+      try {
+        const nestedUrl = new URL(nested)
+        if (/^https?:$/.test(nestedUrl.protocol)) return nestedUrl.href
+      } catch {}
+    }
+  }
+  return url.href
+}
+
+function rewriteAnchorHref(anchor, target) {
+  anchor.href = target
+  anchor.removeAttribute('ping')
+  anchor.rel = [anchor.rel, 'noreferrer'].filter(Boolean).join(' ')
+}
+
+let linkRewriteTimer = null
+let linkRewriteRunning = false
+const linkRewriteCache = new Map()
+
+async function rewriteRedirectableLinks() {
+  if (linkRewriteRunning || window.top !== window || !document?.querySelectorAll) return
+  linkRewriteRunning = true
+  try {
+    const stored = await storageGet(['freedirectState'])
+    const anchors = Array.from(document.querySelectorAll('a[href]')).slice(0, 600)
+    const pendingUrls = []
+    const anchorsByUrl = new Map()
+    for (const anchor of anchors) {
+      const original = unwrappedOutboundUrl(anchor.href)
+      if (!original || original === anchor.href && anchor.dataset.freedirectChecked === original) continue
+      anchor.dataset.freedirectChecked = original
+      let target = linkRewriteCache.get(original)
+      if (target === undefined) {
+        try { target = redditRedirect(new URL(original), stored.freedirectState) } catch { target = null }
+      }
+      if (target) {
+        linkRewriteCache.set(original, target)
+        rewriteAnchorHref(anchor, target)
+        continue
+      }
+      if (linkRewriteCache.has(original)) continue
+      if (!anchorsByUrl.has(original)) {
+        anchorsByUrl.set(original, [])
+        pendingUrls.push(original)
+      }
+      anchorsByUrl.get(original).push(anchor)
+      if (pendingUrls.length >= 120) break
+    }
+    if (pendingUrls.length) {
+      const response = await send({ type: 'diagnoseUrls', urls: pendingUrls, source: 'link-rewrite' })
+      const diagnoses = response?.diagnoses ?? []
+      pendingUrls.forEach((url, index) => {
+        const target = diagnoses[index]?.redirectUrl || null
+        linkRewriteCache.set(url, target)
+        if (target) for (const anchor of anchorsByUrl.get(url) ?? []) rewriteAnchorHref(anchor, target)
+      })
+    }
+    if (linkRewriteCache.size > 1000) linkRewriteCache.clear()
+  } catch {
+    // Link rewriting is an optimization for Safari history correctness; DNR and
+    // navigation fallbacks still handle redirects if messaging is unavailable.
+  } finally {
+    linkRewriteRunning = false
+  }
+}
+
+function scheduleLinkRewrite() {
+  if (linkRewriteTimer) return
+  linkRewriteTimer = setTimeout(() => {
+    linkRewriteTimer = null
+    rewriteRedirectableLinks()
+  }, 50)
+}
+
+function startLinkRewriteObserver() {
+  if (window.top !== window || !document?.documentElement) return
+  scheduleLinkRewrite()
+  try {
+    const observer = new MutationObserver(scheduleLinkRewrite)
+    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['href'] })
+    setTimeout(() => observer.disconnect(), 15000)
+  } catch {}
+}
+
 async function runStorageRedirect() {
   if (window.top !== window) return false
   if (!/^https?:$/.test(location.protocol)) return false
@@ -104,7 +195,7 @@ async function runFallbackRedirect() {
     if (!target || target === CURRENT_URL) return
     const targetUrl = new URL(target)
     if (!/^(https?|freetube):$/.test(targetUrl.protocol)) return
-    location.href = targetUrl.href
+    location.replace(targetUrl.href)
     if (targetUrl.protocol === 'freetube:') {
       setTimeout(() => {
         if (history.length > 1) history.back()
@@ -117,4 +208,5 @@ async function runFallbackRedirect() {
   }
 }
 
+startLinkRewriteObserver()
 runFallbackRedirect()

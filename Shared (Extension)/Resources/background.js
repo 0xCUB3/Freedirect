@@ -940,6 +940,13 @@ async function redirectNavigationUrl(tabId, url, { rescue = false } = {}) {
   const state = await getState()
   const redirected = applyTemplateRedirect(url, state)
   if (!redirected || redirected === url) return null
+
+  // Normal web redirects should be handled by DNR before Safari commits the
+  // original URL, or by the document_start content script via location.replace.
+  // Updating the tab from navigation events can leave the original URL in iOS
+  // Safari's back stack, which breaks swipe-back behavior.
+  if (!rescue && !redirected.startsWith('freetube://')) return redirected
+
   const key = `${tabId}:${url}`
   const previousAttempt = recentNavigationRedirects.get(key) || 0
   if (!rescue && Date.now() - previousAttempt < 1500) return redirected
@@ -1254,6 +1261,8 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { url: applyTemplateRedirect(message.url, state) }
       case 'diagnoseUrl':
         return { diagnosis: diagnoseUrl(message.url, state) }
+      case 'diagnoseUrls':
+        return { diagnoses: (message.urls ?? []).slice(0, 200).map(url => diagnoseUrl(url, state)) }
       case 'diagnoseCurrent':
         return { diagnosis: await diagnoseCurrent() }
       case 'previewReverse':
