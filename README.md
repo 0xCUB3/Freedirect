@@ -42,12 +42,7 @@ The native app only exists to contain and enable the Safari extension. All redir
 
 ## Install
 
-```sh
-brew tap 0xcub3/freedirect
-brew install --cask freedirect
-```
-
-A DMG is also available from GitHub Releases.
+Homebrew, DMG, and App Store releases will be available soon.
 
 ## Notes
 
