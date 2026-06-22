@@ -17,8 +17,9 @@ function show(platform, enabled, useSettingsInsteadOfPreferences) {
     }
 }
 
-function openPreferences() {
-    webkit.messageHandlers.controller.postMessage("open-preferences");
+function postControllerMessage(message) {
+    webkit.messageHandlers.controller.postMessage(message);
 }
 
-document.querySelector("button.open-preferences").addEventListener("click", openPreferences);
+document.querySelector("button.open-preferences").addEventListener("click", () => postControllerMessage("open-preferences"));
+document.querySelector("button.open-extension-settings").addEventListener("click", () => postControllerMessage("open-extension-settings"));

@@ -44,6 +44,8 @@ The native app only exists to contain and enable the Safari extension. All redir
 
 Homebrew, DMG, and App Store releases will be available soon.
 
+After installing, enable Freedirect in Safari Extensions and set website access to Allow for all sites. Redirect rules need all-sites access so Safari can run the extension before supported links open.
+
 ## Notes
 
 Freedirect depends on public alternative frontends, and those frontends can be unreliable. Services with unstable public frontends may be disabled by default or marked conservatively in the settings UI.

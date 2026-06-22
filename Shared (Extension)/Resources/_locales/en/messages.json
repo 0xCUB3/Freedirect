@@ -84,6 +84,7 @@
   "unpin": { "message": "Unpin" },
   "check": { "message": "Check" },
   "selectBest": { "message": "Best" },
+  "selectBestAll": { "message": "Best all" },
   "instanceMode": { "message": "Instance mode" },
   "selectedMode": { "message": "Selected" },
   "rotatingMode": { "message": "Daily rotation" },

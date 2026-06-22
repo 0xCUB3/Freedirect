@@ -12,9 +12,9 @@ const api = globalThis.chrome ?? globalThis.browser
   const HEALTH_STALE_MS = 7 * 24 * 60 * 60 * 1000
   function runtimeError() { return api?.runtime?.lastError?.message }
   function messageTimeout(type) {
-    if (type === 'selectBestInstance') return 75000
+    if (['selectBestInstance', 'updateService'].includes(type)) return 75000
     if (['checkAllSelectedHealth', 'refreshPublicInstances', 'setAllServices'].includes(type)) return 45000
-    if (['checkInstanceHealth', 'rebuildRules', 'applyProfile', 'resetState', 'updateService', 'importState', 'runSanityCheck'].includes(type)) return 20000
+    if (['checkInstanceHealth', 'rebuildRules', 'applyProfile', 'resetState', 'importState', 'runSanityCheck'].includes(type)) return 20000
     return 10000
   }
   function msg(type, body = {}) {
@@ -198,7 +198,7 @@ const api = globalThis.chrome ?? globalThis.browser
     updateCurrentService(serviceId, data.state.services[serviceId])
     return data.state.services[serviceId]
   }
-  async function checkServiceOrBest(serviceId) {
+  async function checkServiceOrBest(serviceId, { selectBestWhenUnchecked = false } = {}) {
     const config = current?.state?.services?.[serviceId]
     if (!config?.enabled) return
     const service = current.catalog[serviceId]
@@ -207,13 +207,20 @@ const api = globalThis.chrome ?? globalThis.browser
       setRowHealthText(serviceId, t('notApplicable'), 'na')
       return
     }
-    setRowHealthText(serviceId, 'checking…')
-    await nextPaint()
-    const health = await msg('checkInstanceHealth', { serviceId, instance: config.instance }).then(result => result.health, () => ({ ok: false }))
-    if (!health?.ok) {
+    const existingHealth = config.health?.[config.instance]
+    if (selectBestWhenUnchecked && !existingHealth) {
       setRowHealthText(serviceId, 'finding best…', 'warn')
       await nextPaint()
       await msg('selectBestInstance', { serviceId }).catch(() => null)
+    } else {
+      setRowHealthText(serviceId, 'checking…')
+      await nextPaint()
+      const health = await msg('checkInstanceHealth', { serviceId, instance: config.instance }).then(result => result.health, () => ({ ok: false }))
+      if (!health?.ok) {
+        setRowHealthText(serviceId, 'finding best…', 'warn')
+        await nextPaint()
+        await msg('selectBestInstance', { serviceId }).catch(() => null)
+      }
     }
     const nextConfig = await refreshServiceState(serviceId).catch(() => null)
     const activeConfig = nextConfig || current?.state?.services?.[serviceId]
@@ -229,6 +236,27 @@ const api = globalThis.chrome ?? globalThis.browser
     const nextId = () => ids[index++]
     await Promise.all(Array.from({ length: Math.min(4, ids.length) }, async () => {
       for (let serviceId = nextId(); serviceId; serviceId = nextId()) await checkServiceOrBest(serviceId)
+    }))
+    await refresh()
+  }
+  async function selectBestEnabledProgressively() {
+    const ids = Object.keys(current?.state?.services || {}).filter(id => current.state.services[id].enabled)
+    let index = 0
+    const nextId = () => ids[index++]
+    await Promise.all(Array.from({ length: Math.min(2, ids.length) }, async () => {
+      for (let serviceId = nextId(); serviceId; serviceId = nextId()) {
+        setRowHealthText(serviceId, 'finding best…', 'warn')
+        await nextPaint()
+        try {
+          const result = await msg('selectBestInstance', { serviceId })
+          const best = result?.best
+          setRowInstance(serviceId, best?.instance)
+          if (best?.health?.ok) setRowHealthText(serviceId, `${best.health.latencyMs ?? 'ok'} ms`, 'ok')
+          else setRowHealthText(serviceId, t('notApplicable'), 'na')
+        } catch (error) {
+          setRowHealthText(serviceId, t('failed'), 'bad')
+        }
+      }
     }))
     await refresh()
   }
@@ -266,7 +294,7 @@ const api = globalThis.chrome ?? globalThis.browser
     await nextPaint()
     await msg('updateService', { serviceId, patch })
     await refresh()
-    if ((field === 'instance' || field === 'frontend' || field === 'enabled') && current.state.services[serviceId]?.enabled) await checkServiceOrBest(serviceId)
+    if ((field === 'instance' || field === 'frontend' || field === 'enabled') && current.state.services[serviceId]?.enabled) await checkServiceOrBest(serviceId, { selectBestWhenUnchecked: field === 'enabled' && event.target.checked })
   })
   $('services').addEventListener('click', async event => {
     const button = event.target.closest('button[data-action]')
@@ -329,6 +357,7 @@ const api = globalThis.chrome ?? globalThis.browser
     catch (error) { $('sanityReport').textContent = `Sanity check failed: ${error?.message || error}` }
   })
   $('checkAll').addEventListener('click', event => runButtonAction(event.currentTarget, 'Checking selected instances…', checkEnabledProgressively, { refreshAfter: false }))
+  $('bestAll').addEventListener('click', event => runButtonAction(event.currentTarget, 'Finding best instances…', selectBestEnabledProgressively, { refreshAfter: false }))
   $('showCommands').addEventListener('click', async () => {
     const result = await msg('getCommands')
     $('commands').innerHTML = result.available ? result.commands.map(command => `<li>${esc(command.description || command.name)} — ${esc(command.shortcut || 'unassigned')}</li>`).join('') : `<li>${esc(result.reason || t('commandsUnavailable'))}</li>`

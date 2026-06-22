@@ -67,7 +67,7 @@ body.state-off :is(.state-on, .state-unknown) {
 }
 
 .instructions ol {
-    margin: 0;
+    margin: 1em 0 0;
     padding-left: 1.4em;
 }
 
@@ -83,4 +83,9 @@ body.state-off :is(.state-on, .state-unknown) {
 
 button {
     font-size: 1em;
+}
+
+.open-extension-settings {
+    display: block;
+    margin: 0 auto;
 }
