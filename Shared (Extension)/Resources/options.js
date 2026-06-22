@@ -9,6 +9,11 @@ const api = globalThis.chrome ?? globalThis.browser
   let current
   const HEALTH_STALE_MS = 7 * 24 * 60 * 60 * 1000
   function runtimeError() { return api?.runtime?.lastError?.message }
+  function messageTimeout(type) {
+    if (['selectBestInstance', 'checkAllSelectedHealth', 'refreshPublicInstances'].includes(type)) return 45000
+    if (['checkInstanceHealth', 'rebuildRules', 'applyProfile', 'setAllServices', 'resetState', 'updateService', 'importState'].includes(type)) return 20000
+    return 10000
+  }
   function msg(type, body = {}) {
     const payload = { type, ...body }
     return new Promise((resolve, reject) => {
@@ -20,7 +25,7 @@ const api = globalThis.chrome ?? globalThis.browser
         if (error) reject(error)
         else resolve(value)
       }
-      const timer = setTimeout(() => finish(null, new Error('Extension background did not respond.')), 5000)
+      const timer = setTimeout(() => finish(null, new Error('Extension background did not respond.')), messageTimeout(type))
       try {
         const result = api.runtime.sendMessage(payload, response => {
           const error = runtimeError()
