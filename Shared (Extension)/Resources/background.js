@@ -30,6 +30,7 @@ const TOOLBAR_ICONS = {
   }
 }
 let bundledInstancesLoaded = false
+let stateWriteQueue = Promise.resolve()
 const tabLastGoodUrls = new Map()
 const recentNavigationRedirects = new Map()
 const NATIVE_APP_ID = 'app.freedirect.Freedirect'
@@ -543,6 +544,17 @@ async function saveState(state) {
   await storageSet({ freedirectState: state })
 }
 
+function withStateWrite(mutator) {
+  const run = stateWriteQueue.catch(() => null).then(async () => {
+    const state = await getState()
+    const result = await mutator(state)
+    await saveState(state)
+    return result
+  })
+  stateWriteQueue = run.then(() => null, () => null)
+  return run
+}
+
 function mergePublicInstanceData(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return 0
   let added = 0
@@ -587,10 +599,10 @@ async function loadPublicInstances({ force = false, bundledOnly = false } = {}) 
       const fetchedAt = new Date().toISOString()
       mergePublicInstanceData(data)
       await storageSet({ freedirectPublicInstances: { fetchedAt, source: url, data } })
-      const state = migrateState(stored.freedirectState)
-      state.diagnostics.lastInstanceRefreshAt = fetchedAt
-      state.diagnostics.lastInstanceRefreshError = null
-      await saveState(state)
+      await withStateWrite(state => {
+        state.diagnostics.lastInstanceRefreshAt = fetchedAt
+        state.diagnostics.lastInstanceRefreshError = null
+      })
       return { ok: true, cached: false, fetchedAt, source: url }
     } catch (error) {
       lastError = error
@@ -600,10 +612,11 @@ async function loadPublicInstances({ force = false, bundledOnly = false } = {}) 
     mergePublicInstanceData(cached.data)
     return { ok: true, cached: true, fetchedAt: cached.fetchedAt, warning: String(lastError?.message ?? lastError) }
   }
-  const state = migrateState(stored.freedirectState)
-  state.diagnostics.lastInstanceRefreshError = String(lastError?.message ?? lastError ?? 'No public instance source available')
-  await saveState(state)
-  return { ok: false, reason: state.diagnostics.lastInstanceRefreshError }
+  const reason = String(lastError?.message ?? lastError ?? 'No public instance source available')
+  await withStateWrite(state => {
+    state.diagnostics.lastInstanceRefreshError = reason
+  })
+  return { ok: false, reason }
 }
 
 function selectedInstance(serviceId, state) {
@@ -727,26 +740,25 @@ async function rebuildRules() {
   const validation = await supportedDnrRules(requestedRules)
   const addRules = validation.rules
   const metadataById = new Map(records.map(record => [record.rule.id, record]))
+  const diagnostics = { lastGeneratedAt: new Date().toISOString(), lastRuleCount: 0, lastRejectedRules: [], lastError: null }
   try {
     await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds, addRules })
-    state.diagnostics.lastGeneratedAt = new Date().toISOString()
-    state.diagnostics.lastRuleCount = addRules.length
-    state.diagnostics.lastRejectedRules = validation.rejected.map(rejected => ({
+    diagnostics.lastRuleCount = addRules.length
+    diagnostics.lastRejectedRules = validation.rejected.map(rejected => ({
       id: rejected.id,
       serviceId: metadataById.get(rejected.id)?.serviceId || null,
       serviceName: metadataById.get(rejected.id)?.serviceName || null,
       source: metadataById.get(rejected.id)?.source || null,
       reason: rejected.reason || 'unsupported regex'
     }))
-    state.diagnostics.lastError = validation.rejected.length ? `${validation.rejected.length} unsupported redirect rules were skipped.` : null
+    diagnostics.lastError = validation.rejected.length ? `${validation.rejected.length} unsupported redirect rules were skipped.` : null
   } catch (error) {
-    state.diagnostics.lastGeneratedAt = new Date().toISOString()
-    state.diagnostics.lastRuleCount = 0
-    state.diagnostics.lastRejectedRules = []
-    state.diagnostics.lastError = String(error?.message ?? error)
+    diagnostics.lastError = String(error?.message ?? error)
   }
-  await saveState(state)
-  return state.diagnostics
+  return await withStateWrite(latest => {
+    latest.diagnostics = { ...latest.diagnostics, ...diagnostics }
+    return latest.diagnostics
+  })
 }
 
 function serviceForOriginal(url) {
@@ -881,11 +893,12 @@ async function checkInstanceHealth(serviceId, instance) {
   } catch (error) {
     health = { ok: false, status: null, latencyMs: null, checkedAt: new Date().toISOString(), error: String(error?.message ?? error) }
   }
-  const latest = await getState()
-  latest.services[serviceId].health = { ...(latest.services[serviceId].health ?? {}), [origin]: health }
-  latest.diagnostics.lastHealthCheckAt = health.checkedAt
-  latest.diagnostics.lastHealthError = health.ok ? null : health.error
-  await saveState(latest)
+  await withStateWrite(latest => {
+    if (!latest.services[serviceId]) return
+    latest.services[serviceId].health = { ...(latest.services[serviceId].health ?? {}), [origin]: health }
+    latest.diagnostics.lastHealthCheckAt = health.checkedAt
+    latest.diagnostics.lastHealthError = health.ok ? null : health.error
+  })
   return health
 }
 
@@ -894,12 +907,14 @@ async function checkAllSelectedHealth() {
   const entries = Object.entries(state.services).filter(([, config]) => config.enabled)
   const checkedAt = new Date().toISOString()
   const results = {}
-  await Promise.all(entries.map(async ([serviceId]) => {
+  const writes = {}
+  await mapConcurrent(entries, BEST_INSTANCE_CONCURRENCY, async ([serviceId]) => {
     const service = SERVICE_CATALOG[serviceId]
     const instance = selectedInstance(serviceId, state)
     const frontend = serviceFrontends(service, state.services[serviceId])[state.services[serviceId].frontend]
     if (frontend?.appProtocol) {
       results[serviceId] = { ok: true, status: null, latencyMs: null, checkedAt, error: null }
+      writes[serviceId] = { instance, health: results[serviceId] }
       return
     }
     try {
@@ -908,14 +923,16 @@ async function checkAllSelectedHealth() {
     } catch (error) {
       results[serviceId] = { ok: false, status: null, latencyMs: null, checkedAt, error: String(error?.message ?? error) }
     }
-  }))
-  for (const [serviceId, health] of Object.entries(results)) {
-    const instance = selectedInstance(serviceId, state)
-    state.services[serviceId].health = { ...(state.services[serviceId].health ?? {}), [instance]: health }
-  }
-  state.diagnostics.lastHealthCheckAt = checkedAt
-  state.diagnostics.lastHealthError = Object.values(results).find(result => !result.ok)?.error ?? null
-  await saveState(state)
+    writes[serviceId] = { instance, health: results[serviceId] }
+  })
+  await withStateWrite(latest => {
+    for (const [serviceId, record] of Object.entries(writes)) {
+      if (!latest.services[serviceId]) continue
+      latest.services[serviceId].health = { ...(latest.services[serviceId].health ?? {}), [record.instance]: record.health }
+    }
+    latest.diagnostics.lastHealthCheckAt = checkedAt
+    latest.diagnostics.lastHealthError = Object.values(results).find(result => !result.ok)?.error ?? null
+  })
   return results
 }
 
@@ -998,9 +1015,10 @@ async function selectBestInstance(serviceId) {
   if (!candidates.length) throw new Error('No instances available')
   if (frontend.appProtocol) {
     const best = { ok: true, status: null, latencyMs: null, checkedAt: new Date().toISOString(), error: null }
-    const latest = await getState()
-    latest.services[serviceId] = sanitizeServiceUpdate(serviceId, latest.services[serviceId], { instance: candidates[0], mode: 'selected' })
-    await saveState(latest)
+    await withStateWrite(latest => {
+      if (!latest.services[serviceId]) return
+      latest.services[serviceId] = sanitizeServiceUpdate(serviceId, latest.services[serviceId], { instance: candidates[0], mode: 'selected' })
+    })
     await rebuildRules()
     return { serviceId, instance: candidates[0], health: best, checked: 1 }
   }
@@ -1020,12 +1038,13 @@ async function selectBestInstance(serviceId) {
     if (record.health.ok && (!best || record.health.latencyMs < best.health.latencyMs)) best = record
   }
   if (!best) throw new Error('No reachable instance found')
-  const latest = await getState()
-  latest.services[serviceId] = sanitizeServiceUpdate(serviceId, latest.services[serviceId], { instance: best.instance, mode: 'selected' })
-  latest.services[serviceId].health = { ...(latest.services[serviceId].health ?? {}), ...health }
-  latest.diagnostics.lastHealthCheckAt = checkedAt
-  latest.diagnostics.lastHealthError = null
-  await saveState(latest)
+  await withStateWrite(latest => {
+    if (!latest.services[serviceId]) return
+    latest.services[serviceId] = sanitizeServiceUpdate(serviceId, latest.services[serviceId], { instance: best.instance, mode: 'selected' })
+    latest.services[serviceId].health = { ...(latest.services[serviceId].health ?? {}), ...health }
+    latest.diagnostics.lastHealthCheckAt = checkedAt
+    latest.diagnostics.lastHealthError = null
+  })
   await rebuildRules()
   return { serviceId, instance: best.instance, health: best.health, checked: candidates.length }
 }

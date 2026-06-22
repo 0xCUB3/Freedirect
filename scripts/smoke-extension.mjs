@@ -179,6 +179,10 @@ for (const [serviceId, input] of Object.entries(serviceSamples)) {
   if (!result.url.startsWith(instance)) throw new Error(`Expected ${serviceId} to redirect to ${instance}, got ${result.url}`)
 }
 if (Object.keys(serviceSamples).length !== Object.keys(response.catalog).length) throw new Error('Service sample coverage mismatch')
+activeHealthFetches = 0
+maxHealthFetches = 0
+await send({ type: 'checkAllSelectedHealth' })
+if (maxHealthFetches > 8) throw new Error(`Expected selected health checks to be concurrency-limited, saw ${maxHealthFetches}`)
 
 await send({ type: 'addCustomInstance', serviceId: 'youtube', instance: 'https://example.invalid/path' })
 await send({ type: 'toggleFavoriteInstance', serviceId: 'youtube', instance: 'https://example.invalid' })

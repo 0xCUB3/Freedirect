@@ -26,6 +26,7 @@ const api = globalThis.chrome ?? globalThis.browser
         settled = true
         clearTimeout(timer)
         if (error) reject(error)
+        else if (value?.error) reject(new Error(value.error))
         else resolve(value)
       }
       const timer = setTimeout(() => finish(null, new Error('Extension background did not respond.')), messageTimeout(type))

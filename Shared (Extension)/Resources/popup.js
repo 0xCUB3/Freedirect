@@ -19,6 +19,7 @@ function msg(type, body = {}) {
       settled = true
       clearTimeout(timer)
       if (error) reject(error)
+      else if (value?.error) reject(new Error(value.error))
       else resolve(value)
     }
     try {
