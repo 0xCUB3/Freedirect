@@ -6,6 +6,8 @@ const SESSION_RULE_ID_BASE = 900000
 const STATIC_OVERRIDE_RULE_ID_BASE = 910000
 const MAX_RULES = 5000
 const HEALTH_TIMEOUT_MS = 6000
+const BEST_INSTANCE_HEALTH_TIMEOUT_MS = 2500
+const BEST_INSTANCE_CONCURRENCY = 8
 const INSTANCE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 const INSTANCE_SNAPSHOT_PATH = 'instances.json'
 const STATIC_RULESET_ID = 'freedirect_static_defaults'
@@ -852,6 +854,18 @@ async function fetchWithTimeout(url, timeout = HEALTH_TIMEOUT_MS) {
   }
 }
 
+async function mapConcurrent(items, limit, worker) {
+  const results = new Array(items.length)
+  let index = 0
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, async () => {
+    while (index < items.length) {
+      const current = index++
+      results[current] = await worker(items[current], current)
+    }
+  }))
+  return results
+}
+
 async function checkInstanceHealth(serviceId, instance) {
   const service = SERVICE_CATALOG[serviceId]
   if (!service) throw new Error('Unknown service')
@@ -993,16 +1007,18 @@ async function selectBestInstance(serviceId) {
   let best = null
   const health = { ...(config.health ?? {}) }
   const checkedAt = new Date().toISOString()
-  await Promise.all(candidates.map(async instance => {
+  const checked = await mapConcurrent(candidates, BEST_INSTANCE_CONCURRENCY, async instance => {
     try {
-      const result = await fetchWithTimeout(instance, 3500)
-      const record = { ok: result.ok, status: result.status, latencyMs: result.latencyMs, checkedAt, error: null }
-      health[instance] = record
-      if (record.ok && (!best || record.latencyMs < best.health.latencyMs)) best = { instance, health: record }
+      const result = await fetchWithTimeout(instance, BEST_INSTANCE_HEALTH_TIMEOUT_MS)
+      return { instance, health: { ok: result.ok, status: result.status, latencyMs: result.latencyMs, checkedAt, error: null } }
     } catch (error) {
-      health[instance] = { ok: false, status: null, latencyMs: null, checkedAt, error: String(error?.message ?? error) }
+      return { instance, health: { ok: false, status: null, latencyMs: null, checkedAt, error: String(error?.message ?? error) } }
     }
-  }))
+  })
+  for (const record of checked) {
+    health[record.instance] = record.health
+    if (record.health.ok && (!best || record.health.latencyMs < best.health.latencyMs)) best = record
+  }
   if (!best) throw new Error('No reachable instance found')
   const latest = await getState()
   latest.services[serviceId] = sanitizeServiceUpdate(serviceId, latest.services[serviceId], { instance: best.instance, mode: 'selected' })

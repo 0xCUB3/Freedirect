@@ -12,7 +12,8 @@ const api = globalThis.chrome ?? globalThis.browser
   const HEALTH_STALE_MS = 7 * 24 * 60 * 60 * 1000
   function runtimeError() { return api?.runtime?.lastError?.message }
   function messageTimeout(type) {
-    if (['selectBestInstance', 'checkAllSelectedHealth', 'refreshPublicInstances', 'setAllServices'].includes(type)) return 45000
+    if (type === 'selectBestInstance') return 75000
+    if (['checkAllSelectedHealth', 'refreshPublicInstances', 'setAllServices'].includes(type)) return 45000
     if (['checkInstanceHealth', 'rebuildRules', 'applyProfile', 'resetState', 'updateService', 'importState', 'runSanityCheck'].includes(type)) return 20000
     return 10000
   }
@@ -272,9 +273,17 @@ const api = globalThis.chrome ?? globalThis.browser
     const row = button.closest('.service')
     const serviceId = row.dataset.service
     const instance = row.querySelector('[data-field="instance"]').value
+    if (button.dataset.action === 'best') {
+      await runButtonAction(button, 'Finding best…', async () => {
+        setRowHealthText(serviceId, 'finding best…', 'warn')
+        await nextPaint()
+        const result = await msg('selectBestInstance', { serviceId })
+        setRowInstance(serviceId, result?.best?.instance)
+      })
+      return
+    }
     try {
       if (button.dataset.action === 'favorite') await msg('toggleFavoriteInstance', { serviceId, instance })
-      if (button.dataset.action === 'best') await msg('selectBestInstance', { serviceId })
       if (button.dataset.action === 'health') await msg('checkInstanceHealth', { serviceId, instance })
       if (button.dataset.action === 'custom') {
         openCustomDialog(serviceId)

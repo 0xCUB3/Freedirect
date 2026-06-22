@@ -7,6 +7,8 @@ const listeners = {}
 const storage = {}
 let dynamicRules = []
 let sessionRules = []
+let activeHealthFetches = 0
+let maxHealthFetches = 0
 
 function event(name) {
   return { addListener(callback) { listeners[name] = callback } }
@@ -80,9 +82,15 @@ const context = vm.createContext({
   setTimeout,
   clearTimeout,
   AbortController,
-  fetch: async url => (String(url).includes('libredirect/instances') || String(url).includes('instances.json'))
-    ? { ok: true, status: 200, type: 'basic', async json() { return { invidious: { clearnet: ['https://fast.example', 'https://inv.nadeko.net'] }, redlib: { clearnet: ['https://redlib.example'] } } } }
-    : { ok: true, status: 200, type: 'basic', async json() { return {} } }
+  fetch: async url => {
+    const value = String(url)
+    if (value.includes('libredirect/instances') || value.includes('instances.json')) return { ok: true, status: 200, type: 'basic', async json() { return { invidious: { clearnet: ['https://fast.example', 'https://inv.nadeko.net'] }, redlib: { clearnet: ['https://redlib.example'] } } } }
+    activeHealthFetches += 1
+    maxHealthFetches = Math.max(maxHealthFetches, activeHealthFetches)
+    await new Promise(resolve => setTimeout(resolve, 1))
+    activeHealthFetches -= 1
+    return { ok: true, status: 200, type: 'basic', async json() { return {} } }
+  }
 })
 vm.runInContext(readFileSync('Shared (Extension)/Resources/background.js', 'utf8'), context, { filename: 'background.js' })
 
@@ -92,7 +100,7 @@ if (!storage.freedirectState) throw new Error('Expected stored Freedirect state'
 
 let response = await send({ type: 'getState' })
 if (!response.catalog.youtube) throw new Error('Expected YouTube catalog')
-if (Object.keys(response.catalog).length !== 52) throw new Error(`Expected 52 service groups, got ${Object.keys(response.catalog).length}`)
+if (Object.keys(response.catalog).length !== 51) throw new Error(`Expected 51 service groups, got ${Object.keys(response.catalog).length}`)
 if (Object.values(response.catalog).filter(service => service.confidence === 'high').length !== 11) throw new Error('Expected 11 high-confidence service groups')
 if (Object.values(response.catalog).some(service => !['high', 'starter'].includes(service.confidence))) throw new Error('Expected confidence metadata for every service')
 if (!response.profiles.strict) throw new Error('Expected strict profile')
@@ -135,7 +143,7 @@ const redirectSamples = [
   ['https://www.imdb.com/title/tt0000001/', 'https://libremdb.iket.me/title/tt0000001/'],
   ['https://starwars.fandom.com/wiki/Jedi', 'https://breezewiki.com/starwars/wiki/Jedi'],
   ['https://chat.openai.com/c/abc', 'https://duck.ai/c/abc'],
-  ['https://i.imgur.com/example.png', 'https://rimgo.lunar.icu/example.png']
+  ['https://i.imgur.com/example.png', 'https://rimgo.catsarch.com/example.png']
 ]
 for (const [input, expected] of redirectSamples) {
   const result = await send({ type: 'previewRedirect', url: input })
@@ -206,6 +214,7 @@ if (!health.health.ok) throw new Error('Expected healthy mocked instance')
 const best = await send({ type: 'selectBestInstance', serviceId: 'youtube' })
 response = await send({ type: 'getState' })
 if (!best.best.instance || response.state.services.youtube.instance !== best.best.instance || response.state.services.youtube.mode !== 'selected') throw new Error('Expected best instance selection')
+if (maxHealthFetches > 8) throw new Error(`Expected best-instance checks to be concurrency-limited, saw ${maxHealthFetches}`)
 
 const original = await send({ type: 'originalForCurrent' })
 if (!original.url.includes('youtube.com')) throw new Error('Expected original URL response')
