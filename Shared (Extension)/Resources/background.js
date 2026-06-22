@@ -85,9 +85,17 @@ const SERVICE_CATALOG = {
     defaultFrontend: 'invidious',
     frontends: {
       invidious: { name: 'Invidious', instances: ['https://inv.thepixora.com', 'https://yt.chocolatemoo53.com', 'https://invidious.tiekoetter.com', 'https://inv.nadeko.net', 'https://invidious.nerdvpn.de', 'https://invidious.f5.si'], rules: [
-        { source: '^https?://(www\\.|m\\.)?youtube\\.com/watch\\?v=([^?&#/]+)(.*)', path: '/watch?v=$2$3&local=false', priority: 20 },
+        { source: '^https?://(www\\.|m\\.)?youtube\\.com/watch\\?v=([^?&#/]+)(.*)', path: '/watch?v=$2$3&local=false', priority: 20, dnrRules: [
+          { source: '^https?://youtube\\.com/watch\\?v=([^?&#/]+)(.*)', path: '/watch?v=$1$2&local=false', priority: 20 },
+          { source: '^https?://www\\.youtube\\.com/watch\\?v=([^?&#/]+)(.*)', path: '/watch?v=$1$2&local=false', priority: 20 },
+          { source: '^https?://m\\.youtube\\.com/watch\\?v=([^?&#/]+)(.*)', path: '/watch?v=$1$2&local=false', priority: 20 }
+        ] },
         { source: '^https?://youtu\\.be/([^?&#/]+)(.*)', path: '/watch?v=$1&local=false', priority: 20 },
-        { source: '^https?://(www\\.|m\\.)?youtube\\.com/(.*)', path: '/$2' },
+        { source: '^https?://(www\\.|m\\.)?youtube\\.com/(.*)', path: '/$2', dnrRules: [
+          { source: '^https?://youtube\\.com/(.*)', path: '/$1' },
+          { source: '^https?://www\\.youtube\\.com/(.*)', path: '/$1' },
+          { source: '^https?://m\\.youtube\\.com/(.*)', path: '/$1' }
+        ] },
         { source: '^https?://(www\\.)?youtube-nocookie\\.com/embed/([^?&#/]+)(.*)', path: '/embed/$2' }
       ] },
       piped: { name: 'Piped', instances: ['https://piped.video', 'https://cf.piped.video', 'https://vc.piped.video', 'https://re.piped.video', 'https://fl.piped.video', 'https://do.piped.video', 'https://nf.piped.video', 'https://az.piped.video', 'https://piped.private.coffee', 'https://piped.yt', 'https://piped.drgns.space', 'https://piped.owo.si', 'https://piped.ducks.party', 'https://piped.codespace.cz', 'https://piped.reallyaweso.me', 'https://piped.darkness.services', 'https://piped.orangenet.cc', 'https://piped.leptons.xyz', 'https://piped.nosebs.ru', 'https://piped.privacy.com.de', 'https://piped.adminforge.de', 'https://adminforge.de'] },
@@ -114,7 +122,12 @@ const SERVICE_CATALOG = {
       libreddit: { name: 'Libreddit', instances: ['https://libreddit.projectsegfau.lt'] }
     },
     rules: [
-      { source: '^https?://(www\\.|old\\.|new\\.)?reddit\\.com/(.*)', path: '/$2' },
+      { source: '^https?://(www\\.|old\\.|new\\.)?reddit\\.com/(.*)', path: '/$2', dnrRules: [
+        { source: '^https?://reddit\\.com/(.*)', path: '/$1' },
+        { source: '^https?://www\\.reddit\\.com/(.*)', path: '/$1' },
+        { source: '^https?://old\\.reddit\\.com/(.*)', path: '/$1' },
+        { source: '^https?://new\\.reddit\\.com/(.*)', path: '/$1' }
+      ] },
       { source: '^https?://redd\\.it/(.*)', path: '/$1' }
     ]
   },
@@ -127,7 +140,13 @@ const SERVICE_CATALOG = {
       nitter: { name: 'Nitter-compatible', instances: ['https://nitter.net', 'https://nitter.poast.org', 'https://xcancel.com'] }
     },
     rules: [
-      { source: '^https?://(www\\.|mobile\\.)?(twitter|x)\\.com/(.*)', path: '/$3' }
+      { source: '^https?://(www\\.|mobile\\.)?(twitter|x)\\.com/(.*)', path: '/$3', dnrRules: [
+        { source: '^https?://x\\.com/(.*)', path: '/$1' },
+        { source: '^https?://www\\.x\\.com/(.*)', path: '/$1' },
+        { source: '^https?://twitter\\.com/(.*)', path: '/$1' },
+        { source: '^https?://www\\.twitter\\.com/(.*)', path: '/$1' },
+        { source: '^https?://mobile\\.twitter\\.com/(.*)', path: '/$1' }
+      ] }
     ]
   },
   instagram: {
@@ -149,7 +168,11 @@ const SERVICE_CATALOG = {
     frontends: {
       proxiTok: { name: 'ProxiTok', instances: ['https://proxitok.pabloferreiro.es', 'https://proxitok.pussthecat.org', 'https://tok.habedieeh.re', 'https://proxitok.privacydev.net', 'https://tok.artemislena.eu', 'https://tok.adminforge.de', 'https://cringe.whatever.social', 'https://proxitok.lunar.icu', 'https://proxitok.privacy.com.de', 'https://cringe.seitan-ayoub.lol', 'https://tt.opnxng.com', 'https://tiktok.wpme.pl', 'https://proxitok.r4fo.com', 'https://proxitok.belloworld.it', 'https://proxitok.herokuapp.com'] }
     },
-    rules: [{ source: '^https?://(www\\.|vm\\.)?tiktok\\.com/(.*)', path: '/$2' }]
+    rules: [{ source: '^https?://(www\\.|vm\\.)?tiktok\\.com/(.*)', path: '/$2', dnrRules: [
+      { source: '^https?://tiktok\\.com/(.*)', path: '/$1' },
+      { source: '^https?://www\\.tiktok\\.com/(.*)', path: '/$1' },
+      { source: '^https?://vm\\.tiktok\\.com/(.*)', path: '/$1' }
+    ] }]
   },
   search: {
     name: 'Google Search',
@@ -314,7 +337,8 @@ function defaultState() {
       lastHealthCheckAt: null,
       lastHealthError: null,
       lastInstanceRefreshAt: null,
-      lastInstanceRefreshError: null
+      lastInstanceRefreshError: null,
+      lastRejectedRules: []
     }
   }
 }
@@ -480,6 +504,7 @@ function migrateState(rawState) {
       lastHealthError: typeof input.diagnostics.lastHealthError === 'string' ? input.diagnostics.lastHealthError.slice(0, 500) : null,
       lastInstanceRefreshAt: typeof input.diagnostics.lastInstanceRefreshAt === 'string' ? input.diagnostics.lastInstanceRefreshAt : null,
       lastInstanceRefreshError: typeof input.diagnostics.lastInstanceRefreshError === 'string' ? input.diagnostics.lastInstanceRefreshError.slice(0, 500) : null,
+      lastRejectedRules: Array.isArray(input.diagnostics.lastRejectedRules) ? input.diagnostics.lastRejectedRules.slice(0, 20).map(rule => ({ id: Number(rule.id) || null, serviceId: String(rule.serviceId || ''), serviceName: String(rule.serviceName || ''), source: String(rule.source || ''), reason: String(rule.reason || '').slice(0, 200) })).filter(rule => rule.id) : [],
       migrations: Array.isArray(input.diagnostics.migrations) ? input.diagnostics.migrations.filter(item => item && typeof item === 'object').slice(-10) : []
     }
   }
@@ -578,6 +603,10 @@ function templateSubstitution(instance, path, { dnr = false } = {}) {
   return base + (dnr ? path.replaceAll('$', '\\') : path)
 }
 
+function dnrTemplates(template) {
+  return template.dnrRules ?? [template]
+}
+
 function ruleRecords(state) {
   if (!state.globalEnabled) return []
   const records = []
@@ -591,7 +620,8 @@ function ruleRecords(state) {
     if (frontend.appProtocol) continue
     const instance = selectedInstance(serviceId, state)
     const templates = frontend.rules ?? service.rules
-    for (const template of templates) {
+    for (const originalTemplate of templates) {
+      for (const template of dnrTemplates(originalTemplate)) {
       if (records.length >= MAX_RULES) break
       const rule = {
         id: id++,
@@ -616,6 +646,7 @@ function ruleRecords(state) {
         substitution: templateSubstitution(instance, template.path, { dnr: true }),
         rule
       })
+      }
     }
   }
   return records
@@ -630,12 +661,17 @@ function staticOverrideRules(state) {
     const frontend = serviceFrontends(service, config)[config?.frontend]
     if (state.globalEnabled && config?.enabled && !frontend?.appProtocol) continue
     const templates = serviceId === 'youtube' ? service.frontends.invidious.rules : service.rules
-    templates.forEach((template, index) => rules.push({
-      id: STATIC_OVERRIDE_RULE_ID_BASE + offsets[serviceId] + index,
-      priority: 100,
-      action: { type: 'allow' },
-      condition: { regexFilter: template.source, resourceTypes: ['main_frame'] }
-    }))
+    let index = 0
+    for (const originalTemplate of templates) {
+      for (const template of dnrTemplates(originalTemplate)) {
+        rules.push({
+          id: STATIC_OVERRIDE_RULE_ID_BASE + offsets[serviceId] + index++,
+          priority: 100,
+          action: { type: 'allow' },
+          condition: { regexFilter: template.source, resourceTypes: ['main_frame'] }
+        })
+      }
+    }
   }
   return rules
 }
@@ -668,17 +704,27 @@ async function rebuildRules() {
   const state = await getState()
   const existing = await callApi(api.declarativeNetRequest, 'getDynamicRules')
   const removeRuleIds = existing.map(rule => rule.id)
-  const requestedRules = makeRules(state)
+  const records = [...staticOverrideRules(state).map(rule => ({ rule, serviceId: 'static-override', serviceName: 'Static override', source: rule.condition.regexFilter })), ...ruleRecords(state)]
+  const requestedRules = records.map(record => record.rule)
   const validation = await supportedDnrRules(requestedRules)
   const addRules = validation.rules
+  const metadataById = new Map(records.map(record => [record.rule.id, record]))
   try {
     await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds, addRules })
     state.diagnostics.lastGeneratedAt = new Date().toISOString()
     state.diagnostics.lastRuleCount = addRules.length
+    state.diagnostics.lastRejectedRules = validation.rejected.map(rejected => ({
+      id: rejected.id,
+      serviceId: metadataById.get(rejected.id)?.serviceId || null,
+      serviceName: metadataById.get(rejected.id)?.serviceName || null,
+      source: metadataById.get(rejected.id)?.source || null,
+      reason: rejected.reason || 'unsupported regex'
+    }))
     state.diagnostics.lastError = validation.rejected.length ? `${validation.rejected.length} unsupported redirect rules were skipped.` : null
   } catch (error) {
     state.diagnostics.lastGeneratedAt = new Date().toISOString()
     state.diagnostics.lastRuleCount = 0
+    state.diagnostics.lastRejectedRules = []
     state.diagnostics.lastError = String(error?.message ?? error)
   }
   await saveState(state)
@@ -830,15 +876,20 @@ async function runSanityCheck() {
   const enabled = Object.entries(SERVICE_CATALOG).filter(([serviceId]) => state.services[serviceId]?.enabled)
   const permission = await permissionState()
   const issues = []
+  const notes = []
   const checks = []
+  const installedRuleCount = dynamicRules.length
+  const acceptedRuleCount = state.diagnostics.lastRuleCount || installedRuleCount
+  const skippedUnsupported = /unsupported redirect rules were skipped/i.test(state.diagnostics.lastError || '')
   checks.push({ name: 'Global redirect switch', ok: state.globalEnabled, detail: state.globalEnabled ? 'enabled' : 'disabled' })
-  checks.push({ name: 'Safari all-sites permission', ok: permission.allUrls !== false, detail: permission.available ? (permission.allUrls ? 'granted' : 'not granted') : permission.reason })
+  checks.push({ name: 'Safari permission visibility', ok: true, detail: permission.available ? (permission.allUrls ? 'all-sites visible' : 'not visible to extension API') : permission.reason })
   checks.push({ name: 'Enabled services', ok: enabled.length > 0, detail: `${enabled.length} enabled` })
-  checks.push({ name: 'Generated rules', ok: generated.length > 0 || enabled.every(([serviceId, service]) => serviceFrontends(service, state.services[serviceId])[state.services[serviceId].frontend]?.appProtocol), detail: `${generated.length} expected dynamic redirect rules` })
-  checks.push({ name: 'Installed dynamic rules', ok: dynamicRules.length >= generated.length, detail: `${dynamicRules.length} installed` })
-  if (state.diagnostics.lastError) issues.push(`Rule generator: ${state.diagnostics.lastError}`)
-  if (permission.available && permission.allUrls === false) issues.push('Safari has not granted all-sites access; redirects may only work on allowed sites.')
-  if (generated.length && dynamicRules.length < generated.length) issues.push(`Only ${dynamicRules.length}/${generated.length} dynamic rules are installed. Try Rebuild rules.`)
+  checks.push({ name: 'Generated rules', ok: generated.length > 0 || enabled.every(([serviceId, service]) => serviceFrontends(service, state.services[serviceId])[state.services[serviceId].frontend]?.appProtocol), detail: `${generated.length} requested dynamic redirect rules` })
+  checks.push({ name: 'Installed dynamic rules', ok: installedRuleCount >= acceptedRuleCount, detail: `${installedRuleCount} installed${skippedUnsupported ? ` · ${state.diagnostics.lastError}` : ''}` })
+  if (state.diagnostics.lastError && !skippedUnsupported) issues.push(`Rule generator: ${state.diagnostics.lastError}`)
+  if (state.diagnostics.lastRejectedRules?.length) issues.push(`Unsupported skipped rules: ${state.diagnostics.lastRejectedRules.map(rule => `${rule.id} ${rule.serviceName || rule.serviceId}: ${rule.reason}`).join('; ')}`)
+  if (permission.available && permission.allUrls === false) notes.push('Safari does not expose all-sites permission reliably here. If redirects work, this can be ignored; otherwise check Safari extension website access.')
+  if (acceptedRuleCount && installedRuleCount < acceptedRuleCount) issues.push(`Only ${installedRuleCount}/${acceptedRuleCount} accepted dynamic rules are installed. Try Rebuild rules.`)
 
   const services = enabled.map(([serviceId, service]) => {
     const config = state.services[serviceId]
@@ -876,6 +927,7 @@ async function runSanityCheck() {
     checks,
     services,
     issues,
+    notes,
     diagnostics: state.diagnostics,
     sessionRuleCount: sessionRules.length
   }

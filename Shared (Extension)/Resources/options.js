@@ -96,6 +96,10 @@ const api = globalThis.chrome ?? globalThis.browser
       lines.push('', 'Issues:')
       for (const issue of report.issues) lines.push(`- ${issue}`)
     }
+    if (report.notes?.length) {
+      lines.push('', 'Notes:')
+      for (const note of report.notes) lines.push(`- ${note}`)
+    }
     lines.push('', 'Enabled services:')
     for (const service of report.services || []) {
       const health = service.health ? (service.health.ok ? `${service.health.latencyMs ?? 'ok'} ms` : `failed${service.health.error ? ` (${service.health.error})` : ''}`) : 'not checked'
