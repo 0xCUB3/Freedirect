@@ -232,6 +232,15 @@ maxHealthFetches = 0
 await send({ type: 'checkAllSelectedHealth' })
 if (maxHealthFetches > 8) throw new Error(`Expected selected health checks to be concurrency-limited, saw ${maxHealthFetches}`)
 
+await send({ type: 'updateService', serviceId: 'youtube', patch: { frontend: 'materialious', instance: 'materialious://' } })
+let materialiousRedirect = await send({ type: 'previewRedirect', url: 'https://www.youtube.com/watch?v=test' })
+if (materialiousRedirect.url !== 'materialious://watch/test') throw new Error(`Expected Materialious app redirect, got ${materialiousRedirect.url}`)
+materialiousRedirect = await send({ type: 'previewRedirect', url: 'https://youtu.be/abc123' })
+if (materialiousRedirect.url !== 'materialious://watch/abc123') throw new Error(`Expected Materialious short-link redirect, got ${materialiousRedirect.url}`)
+materialiousRedirect = await send({ type: 'previewRedirect', url: 'https://www.youtube.com/shorts/shortid' })
+if (materialiousRedirect.url !== 'materialious://watch/shortid') throw new Error(`Expected Materialious Shorts redirect, got ${materialiousRedirect.url}`)
+await send({ type: 'updateService', serviceId: 'youtube', patch: { frontend: 'invidious', instance: 'https://inv.thepixora.com' } })
+
 await send({ type: 'addCustomInstance', serviceId: 'youtube', instance: 'https://example.invalid/path' })
 await send({ type: 'toggleFavoriteInstance', serviceId: 'youtube', instance: 'https://example.invalid' })
 await send({ type: 'updateService', serviceId: 'youtube', patch: { mode: 'rotating' } })

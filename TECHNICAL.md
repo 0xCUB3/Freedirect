@@ -29,7 +29,7 @@ Settings are stored in `browser.storage.local` under `freedirectState`. The nati
 4. `webNavigation.onErrorOccurred` retries redirectable failed main-frame navigations, useful when DNS blocking wins before Safari finishes extension handling.
 5. `content-script.js` provides a last-resort `document_start` redirect path when a page can load.
 
-App-protocol frontends such as FreeTube use `freetube://` and are intentionally excluded from DNR generation.
+App-protocol frontends such as FreeTube and Materialious use app URL schemes and are intentionally excluded from DNR generation.
 
 ## Build
 

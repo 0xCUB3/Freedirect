@@ -18,7 +18,7 @@ Freedirect is a Safari Web Extension for macOS, iOS, and iPadOS. It rewrites sup
 
 Examples:
 
-- YouTube → Invidious, Piped, or FreeTube
+- YouTube → Invidious, Piped, FreeTube, or Materialious
 - Reddit → Redlib
 - X/Twitter → Nitter-compatible frontends
 - Medium → Scribe or Freedium
@@ -37,7 +37,7 @@ The native app only exists to contain and enable the Safari extension. All redir
 - JSON backup and import
 - Temporary bypass rules
 - URL debugger and generated-rule preview
-- FreeTube app redirects through `freetube://`
+- FreeTube and Materialious app redirects through `freetube://` / `materialious://`
 - Early navigation fallback for cases where DNS blocking prevents the original page from loading
 
 ## Install
@@ -50,7 +50,7 @@ After installing, enable Freedirect in Safari Extensions and set website access 
 
 Freedirect depends on public alternative frontends, and those frontends can be unreliable. Services with unstable public frontends may be disabled by default or marked conservatively in the settings UI.
 
-If you use FreeTube, do not block every YouTube-related domain at DNS level. FreeTube still needs access to YouTube API and media domains to load videos.
+If you use FreeTube or Materialious, do not block every YouTube-related domain at DNS level. These apps still need access to YouTube API and media domains to load videos.
 
 ## Development
 
