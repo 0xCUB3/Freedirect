@@ -8,6 +8,7 @@ const storage = {}
 let dynamicRules = []
 let sessionRules = []
 let enabledRulesets = ['freedirect_static_defaults']
+let activeTabUrl = 'https://www.youtube.com/watch?v=test'
 let activeHealthFetches = 0
 let maxHealthFetches = 0
 
@@ -60,9 +61,15 @@ const browser = {
   commands: { onCommand: event('commands.onCommand'), async getAll() { return [{ name: 'redirect-current', description: 'Redirect the current page', shortcut: 'Alt+Shift+R' }] } },
   webNavigation: { onBeforeNavigate: event('webNavigation.onBeforeNavigate') },
   tabs: {
-    async query() { return [{ id: 1, url: 'https://www.youtube.com/watch?v=test' }] },
-    async update() {},
-    async create() {},
+    async query() { return [{ id: 1, url: activeTabUrl }] },
+    async update(tabId, details = {}) {
+      if (details.url) activeTabUrl = details.url
+      return { id: tabId, url: activeTabUrl }
+    },
+    async create(details = {}) {
+      if (details.active !== false && details.url) activeTabUrl = details.url
+      return { id: 2, url: details.url }
+    },
     async remove() {},
     async reload() {}
   },
@@ -178,6 +185,18 @@ for (const [input, expected] of reverseSamples) {
   const result = await send({ type: 'previewReverse', url: input })
   if (result.url !== expected) throw new Error(`Reverse mismatch for ${input}: ${result.url} !== ${expected}`)
 }
+
+activeTabUrl = 'https://nitter.net/BetaProfiles'
+const openedOriginal = await send({ type: 'reverseCurrent' })
+if (openedOriginal.url !== 'https://x.com/BetaProfiles') throw new Error(`Expected Open original to target X profile, got ${openedOriginal.url}`)
+const originalRule = sessionRules.find(rule => rule.id === 900001)
+if (!originalRule) throw new Error('Expected Open original session allow rule')
+const originalAllow = new RegExp(originalRule.condition.regexFilter)
+if (!originalAllow.test('https://x.com/BetaProfiles/') || !originalAllow.test('https://www.x.com/BetaProfiles?mx=1')) throw new Error(`Expected resilient Open original allow rule, got ${originalRule.condition.regexFilter}`)
+const bypassedVariant = await send({ type: 'diagnoseUrl', url: 'https://x.com/BetaProfiles/' })
+if (bypassedVariant.diagnosis.reason !== 'bypassed' || bypassedVariant.diagnosis.redirectUrl) throw new Error('Expected Open original bypass to handle URL variants')
+await send({ type: 'clearBypasses' })
+activeTabUrl = 'https://www.youtube.com/watch?v=test'
 
 for (const [serviceId, input] of Object.entries(serviceSamples)) {
   const result = await send({ type: 'previewRedirect', url: input })

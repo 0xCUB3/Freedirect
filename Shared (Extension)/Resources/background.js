@@ -794,7 +794,7 @@ function diagnoseUrl(urlString, state) {
   let url
   try { url = new URL(urlString) } catch { return { url: null, serviceId: null, serviceName: null, frontendName: null, instance: null, redirectUrl: null, reverseUrl: null, reason: 'invalid-url' } }
   const reversed = reverseUrl(urlString, state)
-  if ((state.diagnostics.bypassedUrls ?? []).includes(url.href)) return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, redirectUrl: null, reverseUrl: reversed, reason: 'bypassed' }
+  if (isBypassedUrl(url.href, state)) return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, redirectUrl: null, reverseUrl: reversed, reason: 'bypassed' }
   if (!state.globalEnabled) return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, redirectUrl: null, reverseUrl: reversed, reason: 'disabled' }
   for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
     const config = state.services[serviceId]
@@ -1212,7 +1212,7 @@ async function allowOriginalUrl(tabId, url) {
     id,
     priority: 100,
     action: { type: 'allowAllRequests' },
-    condition: { regexFilter: `^${escapeRegex(original)}$`, resourceTypes: ['main_frame'] }
+    condition: { regexFilter: bypassRegexForUrl(original), resourceTypes: ['main_frame'] }
   }
   await callApi(api.declarativeNetRequest, 'updateSessionRules', { removeRuleIds, addRules: [rule] })
   const state = await getState()
@@ -1256,6 +1256,27 @@ async function diagnoseCurrent() {
   if (!tab?.url) return null
   const state = await getState()
   return diagnoseUrl(tab.url, state)
+}
+
+function bypassHostsForUrl(url) {
+  const serviceEntry = serviceForOriginal(url)
+  const hosts = serviceEntry ? serviceEntry[1].originalHosts : [url.hostname]
+  return Array.from(new Set([url.hostname, ...hosts])).filter(Boolean)
+}
+
+function bypassRegexForUrl(value) {
+  const url = new URL(value)
+  const hosts = bypassHostsForUrl(url).map(escapeRegex).join('|')
+  const path = url.pathname === '/' ? '/' : url.pathname.replace(/\/+$/, '')
+  const pathPattern = path === '/' ? '/?' : `${escapeRegex(path)}/?`
+  return `^https?://(${hosts})${pathPattern}([?#].*)?$`
+}
+
+function isBypassedUrl(value, state) {
+  return (state.diagnostics.bypassedUrls ?? []).some(bypassed => {
+    try { return new RegExp(bypassRegexForUrl(bypassed)).test(new URL(value).href) }
+    catch { return value === bypassed }
+  })
 }
 
 function escapeRegex(value) {

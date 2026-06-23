@@ -71,6 +71,7 @@ function selectedRedditInstance(config) {
 }
 
 function redditRedirect(url, state) {
+  if (isBypassedUrl(url.href, state)) return null
   if (state?.globalEnabled === false) return null
   const config = state?.services?.reddit
   if (config?.enabled === false) return null
@@ -80,6 +81,24 @@ function redditRedirect(url, state) {
   if (target !== href) return target
   target = href.replace(/^https?:\/\/redd\.it\/(.*)/, `${instance}/$1`)
   return target !== href ? target : null
+}
+
+function bypassRegexForUrl(value) {
+  const url = new URL(value)
+  const path = url.pathname === '/' ? '/' : url.pathname.replace(/\/+$/, '')
+  const pathPattern = path === '/' ? '/?' : `${escapeRegex(path)}/?`
+  return `^https?://${escapeRegex(url.hostname)}${pathPattern}([?#].*)?$`
+}
+
+function isBypassedUrl(value, state) {
+  return (state?.diagnostics?.bypassedUrls ?? []).some(bypassed => {
+    try { return new RegExp(bypassRegexForUrl(bypassed)).test(new URL(value).href) }
+    catch { return value === bypassed }
+  })
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function unwrappedOutboundUrl(href) {
