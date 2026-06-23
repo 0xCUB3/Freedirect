@@ -228,5 +228,34 @@ async function runFallbackRedirect() {
   }
 }
 
+function looksLikeServerErrorPage() {
+  const title = String(document?.title || '').trim().toLowerCase()
+  const text = String(document?.body?.innerText || '').trim().slice(0, 2500).toLowerCase()
+  const shortPage = text.length < 1200
+  if (/^(502|503|504)\b/.test(title) || /\b(bad gateway|service unavailable|gateway timeout)\b/.test(title)) return true
+  if (!shortPage) return false
+  return /\b(502|503|504)\b/.test(text) && /\b(bad gateway|service unavailable|gateway timeout|origin error|connection timed out)\b/.test(text)
+}
+
+async function runFarsideErrorFallback() {
+  if (window.top !== window) return
+  if (!/^https?:$/.test(location.protocol)) return
+  if (!looksLikeServerErrorPage()) return
+  try {
+    const response = await send({ type: 'farsideFallbackForUrl', url: CURRENT_URL, source: 'server-error-page' })
+    const target = response?.url
+    if (!target || target === CURRENT_URL) return
+    location.replace(target)
+  } catch {}
+}
+
+function scheduleErrorFallbackCheck() {
+  const run = () => setTimeout(runFarsideErrorFallback, 120)
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once: true })
+  else run()
+  setTimeout(runFarsideErrorFallback, 1200)
+}
+
 startLinkRewriteObserver()
 runFallbackRedirect()
+scheduleErrorFallbackCheck()

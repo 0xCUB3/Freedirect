@@ -15,6 +15,33 @@ const INSTANCE_SOURCES = [
   'https://raw.githubusercontent.com/libredirect/instances/main/data.json',
   'https://codeberg.org/LibRedirect/instances/raw/branch/main/data.json'
 ]
+const DEFAULT_FARSIDE_BASE_URL = 'https://farside.link'
+const FARSIDE_LOAD_FALLBACK_MS = 45000
+const FARSIDE_ERROR_FALLBACK_MS = 8000
+const FARSIDE_ROUTING = new Set(['direct', 'fallback', 'always'])
+const FARSIDE_FRONTEND_MAP = {
+  invidious: 'invidious',
+  piped: 'piped',
+  redlib: 'redlib',
+  libreddit: 'libreddit',
+  nitter: 'nitter',
+  proxigram: 'proxigram',
+  scribe: 'scribe',
+  wikiless: 'wikiless',
+  libremdb: 'libremdb',
+  breezeWiki: 'breezewiki',
+  rimgo: 'rimgo',
+  searxng: 'searxng',
+  whoogle: 'whoogle',
+  proxiTok: 'proxitok',
+  simplyTranslate: 'simplytranslate',
+  lingva: 'lingva',
+  quetre: 'quetre',
+  gothub: 'gothub',
+  anonymousOverflow: 'anonymousoverflow',
+  dumb: 'dumb'
+}
+const FARSIDE_SERVICE_IDS = Object.fromEntries(Object.entries(FARSIDE_FRONTEND_MAP).map(([frontendId, farsideService]) => [farsideService, frontendId]))
 const TOOLBAR_ICONS = {
   active: {
     16: 'images/toolbar-blue-16.png',
@@ -33,6 +60,7 @@ let bundledInstancesLoaded = false
 let stateWriteQueue = Promise.resolve()
 const tabLastGoodUrls = new Map()
 const recentNavigationRedirects = new Map()
+const pendingFarsideFallbacks = new Map()
 const NATIVE_APP_ID = 'app.freedirect.Freedirect'
 const PROMISE_STYLE_API = Boolean(globalThis.browser) && api === globalThis.browser
 
@@ -340,6 +368,7 @@ function defaultState() {
       frontend: frontendId,
       instance: service.frontends[frontendId].instances[0],
       mode: 'selected',
+      routing: 'direct',
       customInstances: [],
       favoriteInstances: [],
       health: {}
@@ -348,6 +377,8 @@ function defaultState() {
   return {
     schemaVersion: 1,
     globalEnabled: true,
+    farsideBaseUrl: DEFAULT_FARSIDE_BASE_URL,
+    farsideFallbackEnabled: true,
     profile: 'balanced',
     customProfiles: {},
     services,
@@ -381,6 +412,40 @@ function normalizeInstanceOrigin(value) {
   } catch {
     return null
   }
+}
+
+function normalizeFarsideBaseUrl(value) {
+  return normalizeInstanceOrigin(value) || DEFAULT_FARSIDE_BASE_URL
+}
+
+function farsideBaseUrl(state) {
+  return normalizeFarsideBaseUrl(state?.farsideBaseUrl)
+}
+
+function farsideServiceForFrontend(frontendId) {
+  return FARSIDE_FRONTEND_MAP[frontendId] || null
+}
+
+function farsideServiceForPathSegment(segment) {
+  const frontendId = FARSIDE_SERVICE_IDS[String(segment || '').toLowerCase()]
+  return frontendId ? { frontendId, farsideService: String(segment).toLowerCase() } : null
+}
+
+function farsidePathForFrontend(frontendId, path) {
+  const service = farsideServiceForFrontend(frontendId)
+  if (!service || typeof path !== 'string' || /^https?:/i.test(path) || path.startsWith('$')) return null
+  const suffix = path.startsWith('/') ? path : `/${path}`
+  return `/${service}${suffix}`
+}
+
+function configuredRouting(service, config, frontendId) {
+  const routing = FARSIDE_ROUTING.has(config?.routing) ? config.routing : 'direct'
+  return routing !== 'direct' && !farsidePathForFrontend(frontendId, '/') ? 'direct' : routing
+}
+
+function normalizeConfiguredRouting(service, frontendId, value) {
+  const routing = FARSIDE_ROUTING.has(value) ? value : 'direct'
+  return routing !== 'direct' && !farsidePathForFrontend(frontendId, '/') ? 'direct' : routing
 }
 
 function normalizeConfiguredInstance(serviceId, frontendId, value) {
@@ -457,6 +522,7 @@ function sanitizeServiceConfig(serviceId, rawConfig, defaultConfig) {
     frontend,
     instance: instance && allowedInstances.has(instance) ? instance : defaultInstance,
     mode: 'selected',
+    routing: 'direct',
     customInstances,
     customFrontends,
     favoriteInstances,
@@ -490,6 +556,7 @@ function sanitizeServiceUpdate(serviceId, currentConfig, patch) {
     frontend,
     instance: requestedInstance && allowedInstances.has(requestedInstance) ? requestedInstance : (currentInstance && allowedInstances.has(currentInstance) ? currentInstance : defaultInstance),
     mode: 'selected',
+    routing: 'direct',
     customInstances,
     customFrontends,
     favoriteInstances,
@@ -507,6 +574,8 @@ function migrateState(rawState) {
   const state = { ...defaults }
   state.schemaVersion = defaults.schemaVersion
   state.globalEnabled = typeof input.globalEnabled === 'boolean' ? input.globalEnabled : defaults.globalEnabled
+  state.farsideBaseUrl = normalizeFarsideBaseUrl(input.farsideBaseUrl ?? defaults.farsideBaseUrl)
+  state.farsideFallbackEnabled = typeof input.farsideFallbackEnabled === 'boolean' ? input.farsideFallbackEnabled : defaults.farsideFallbackEnabled
   state.customProfiles = input.customProfiles && typeof input.customProfiles === 'object' && !Array.isArray(input.customProfiles) ? Object.fromEntries(Object.entries(input.customProfiles).map(([id, profile]) => [String(id).slice(0, 40), { name: String(profile?.name || id).slice(0, 80), enabledServices: sanitizeStringArray(profile?.enabledServices, value => String(value)).filter(id => id in SERVICE_CATALOG) }]).filter(([, profile]) => profile.enabledServices.length)) : {}
   const allProfiles = { ...PROFILES, ...state.customProfiles }
   state.profile = input.profile in allProfiles ? input.profile : defaults.profile
@@ -650,17 +719,20 @@ function ruleRecords(state) {
     const frontendId = config.frontend in frontends ? config.frontend : service.defaultFrontend
     const frontend = frontends[frontendId]
     if (frontend.appProtocol) continue
+    const useFarside = false
     const instance = selectedInstance(serviceId, state)
     const templates = frontend.rules ?? service.rules
     for (const originalTemplate of templates) {
       for (const template of dnrTemplates(originalTemplate)) {
-      if (records.length >= MAX_RULES) break
+      const path = useFarside ? farsidePathForFrontend(frontendId, template.path) : template.path
+      if (records.length >= MAX_RULES || !path) break
+      const substitution = templateSubstitution(instance, path, { dnr: true })
       const rule = {
         id: id++,
         priority: template.priority ?? 10,
         action: {
           type: 'redirect',
-          redirect: { regexSubstitution: templateSubstitution(instance, template.path, { dnr: true }) }
+          redirect: { regexSubstitution: substitution }
         },
         condition: {
           regexFilter: template.source,
@@ -672,10 +744,11 @@ function ruleRecords(state) {
         serviceId,
         serviceName: service.name,
         frontendId,
-        frontendName: frontends[frontendId].name,
+        frontendName: `${frontends[frontendId].name}${useFarside ? ' via Farside' : ''}`,
+        routing: useFarside ? 'always' : configuredRouting(service, config, frontendId),
         instance,
         source: template.source,
-        substitution: templateSubstitution(instance, template.path, { dnr: true }),
+        substitution,
         rule
       })
       }
@@ -790,42 +863,87 @@ function applyTemplateRedirect(urlString, state) {
   return diagnoseUrl(urlString, state).redirectUrl
 }
 
-function diagnoseUrl(urlString, state) {
-  let url
-  try { url = new URL(urlString) } catch { return { url: null, serviceId: null, serviceName: null, frontendName: null, instance: null, redirectUrl: null, reverseUrl: null, reason: 'invalid-url' } }
-  const reversed = reverseUrl(urlString, state)
-  if (isBypassedUrl(url.href, state)) return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, redirectUrl: null, reverseUrl: reversed, reason: 'bypassed' }
-  if (!state.globalEnabled) return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, redirectUrl: null, reverseUrl: reversed, reason: 'disabled' }
-  for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
-    const config = state.services[serviceId]
-    if (!config?.enabled) continue
-    const frontends = serviceFrontends(service, config)
-    const frontendId = config.frontend in frontends ? config.frontend : service.defaultFrontend
-    const frontend = frontends[frontendId]
-    const instance = selectedInstance(serviceId, state).replace(/\/$/, '')
-    const templates = frontend.rules ?? service.rules
-    for (const template of templates) {
-      const regex = new RegExp(template.source)
-      if (regex.test(url.href)) {
-        return {
-          url: url.href,
-          serviceId,
-          serviceName: service.name,
-          frontendName: frontends[frontendId].name,
-          instance,
-          redirectUrl: url.href.replace(regex, templateSubstitution(instance, template.path)),
-          reverseUrl: reversed,
-          reason: 'matched'
-        }
-      }
+function redirectForServiceUrl(serviceId, service, config, url, state, { forceFarside = false } = {}) {
+  if (!config?.enabled) return null
+  const frontends = serviceFrontends(service, config)
+  const frontendId = config.frontend in frontends ? config.frontend : service.defaultFrontend
+  const frontend = frontends[frontendId]
+  const useFarside = Boolean(forceFarside)
+  const instance = (useFarside ? farsideBaseUrl(state) : selectedInstance(serviceId, state)).replace(/\/$/, '')
+  const templates = frontend.rules ?? service.rules
+  for (const template of templates) {
+    const regex = new RegExp(template.source)
+    if (!regex.test(url.href)) continue
+    const path = useFarside ? farsidePathForFrontend(frontendId, template.path) : template.path
+    if (!path) return null
+    return {
+      url: url.href,
+      serviceId,
+      serviceName: service.name,
+      frontendName: `${frontends[frontendId].name}${useFarside ? ' via Farside' : ''}`,
+      routing: useFarside ? 'always' : configuredRouting(service, config, frontendId),
+      instance,
+      redirectUrl: url.href.replace(regex, templateSubstitution(instance, path)),
+      reason: 'matched'
     }
   }
-  return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, redirectUrl: null, reverseUrl: reversed, reason: reversed ? 'frontend' : 'no-match' }
+  return null
+}
+
+function diagnoseUrl(urlString, state) {
+  let url
+  try { url = new URL(urlString) } catch { return { url: null, serviceId: null, serviceName: null, frontendName: null, instance: null, routing: null, redirectUrl: null, reverseUrl: null, reason: 'invalid-url' } }
+  const reversed = reverseUrl(urlString, state)
+  if (isBypassedUrl(url.href, state)) return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, routing: null, redirectUrl: null, reverseUrl: reversed, reason: 'bypassed' }
+  if (!state.globalEnabled) return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, routing: null, redirectUrl: null, reverseUrl: reversed, reason: 'disabled' }
+  for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
+    const result = redirectForServiceUrl(serviceId, service, state.services[serviceId], url, state)
+    if (result) return { ...result, reverseUrl: reversed }
+  }
+  return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, routing: null, redirectUrl: null, reverseUrl: reversed, reason: reversed ? 'frontend' : 'no-match' }
+}
+
+function originalUrlForServicePath(serviceId, pathname, search, hash) {
+  const service = SERVICE_CATALOG[serviceId]
+  if (!service) return null
+  const primaryHost = service.originalHosts[0]
+  if (serviceId === 'youtube' && pathname.startsWith('/watch')) return `https://www.youtube.com${pathname}${search}`
+  if (serviceId === 'youtube' && pathname.startsWith('/embed/')) return `https://www.youtube.com${pathname}${search}`
+  if (serviceId === 'wikipedia' && pathname.startsWith('/wiki/')) return `https://en.wikipedia.org${pathname}${search}${hash}`
+  if (serviceId === 'fandom') {
+    const match = pathname.match(/^\/([^/]+)\/wiki\/(.*)$/)
+    if (match) return `https://${match[1]}.fandom.com/wiki/${match[2]}${search}${hash}`
+  }
+  if (serviceId === 'search' && pathname.startsWith('/search')) return `https://www.google.com${pathname}${search}${hash}`
+  if (serviceId === 'maps' && pathname.startsWith('/search')) return `https://maps.google.com${pathname}${search}${hash}`
+  return `https://${primaryHost}${pathname}${search}${hash}`
+}
+
+function serviceIdForFarsideSegment(segment, state) {
+  const match = farsideServiceForPathSegment(segment)
+  if (!match) return null
+  for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
+    const config = state.services[serviceId]
+    const frontends = serviceFrontends(service, config)
+    if (frontends[match.frontendId]) return serviceId
+  }
+  return null
+}
+
+function reverseFarsideUrl(url, state) {
+  if (![farsideBaseUrl(state), DEFAULT_FARSIDE_BASE_URL, 'https://cf.farside.link'].includes(url.origin)) return null
+  const parts = url.pathname.split('/').filter(Boolean)
+  if (!parts.length) return null
+  const serviceId = serviceIdForFarsideSegment(parts[0], state)
+  if (!serviceId) return null
+  return originalUrlForServicePath(serviceId, `/${parts.slice(1).join('/')}`, url.search, url.hash)
 }
 
 function reverseUrl(urlString, state) {
   let url
   try { url = new URL(urlString) } catch { return null }
+  const farsideOriginal = reverseFarsideUrl(url, state)
+  if (farsideOriginal) return farsideOriginal
   for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
     const config = state.services[serviceId]
     if (!config) continue
@@ -836,21 +954,68 @@ function reverseUrl(urlString, state) {
         let instanceUrl
         try { instanceUrl = new URL(instance) } catch { continue }
         if (url.hostname !== instanceUrl.hostname) continue
-        const primaryHost = service.originalHosts[0]
-        if (serviceId === 'youtube' && url.pathname.startsWith('/watch')) return `https://www.youtube.com${url.pathname}${url.search}`
-        if (serviceId === 'youtube' && url.pathname.startsWith('/embed/')) return `https://www.youtube.com${url.pathname}${url.search}`
-        if (serviceId === 'wikipedia' && url.pathname.startsWith('/wiki/')) return `https://en.wikipedia.org${url.pathname}${url.search}${url.hash}`
-        if (serviceId === 'fandom') {
-          const match = url.pathname.match(/^\/([^/]+)\/wiki\/(.*)$/)
-          if (match) return `https://${match[1]}.fandom.com/wiki/${match[2]}${url.search}${url.hash}`
-        }
-        if (serviceId === 'search' && url.pathname.startsWith('/search')) return `https://www.google.com${url.pathname}${url.search}${url.hash}`
-        if (serviceId === 'maps' && url.pathname.startsWith('/search')) return `https://maps.google.com${url.pathname}${url.search}${url.hash}`
-        return `https://${primaryHost}${url.pathname}${url.search}${url.hash}`
+        return originalUrlForServicePath(serviceId, url.pathname, url.search, url.hash)
       }
     }
   }
   return null
+}
+
+function farsideFallbackRedirect(urlString, state, { respectGlobal = true } = {}) {
+  if (respectGlobal && !state?.farsideFallbackEnabled) return null
+  let url
+  try { url = new URL(urlString) } catch { return null }
+  if (url.origin === farsideBaseUrl(state)) return null
+  for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
+    const config = state.services[serviceId]
+    if (!config?.enabled) continue
+    const frontends = serviceFrontends(service, config)
+    const frontendId = config.frontend in frontends ? config.frontend : service.defaultFrontend
+    let selected
+    try { selected = new URL(selectedInstance(serviceId, state)) } catch { continue }
+    if (url.hostname !== selected.hostname) continue
+    const farsidePath = farsidePathForFrontend(frontendId, `${url.pathname}${url.search}${url.hash}`)
+    if (farsidePath) return `${farsideBaseUrl(state)}${farsidePath}`
+  }
+  return null
+}
+
+function farsideRedirectForUrl(urlString, state, { respectGlobal = false } = {}) {
+  let url
+  try { url = new URL(urlString) } catch { return null }
+  const fallback = farsideFallbackRedirect(url.href, state, { respectGlobal })
+  if (fallback) return fallback
+  for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
+    const config = state.services[serviceId]
+    if (!config?.enabled) continue
+    const result = redirectForServiceUrl(serviceId, service, config, url, state, { forceFarside: true })
+    if (result?.redirectUrl && result.redirectUrl !== url.href) return result.redirectUrl
+  }
+  return null
+}
+
+function clearFarsideFallbackTimer(tabId) {
+  const timer = pendingFarsideFallbacks.get(tabId)
+  if (timer) clearTimeout(timer)
+  pendingFarsideFallbacks.delete(tabId)
+}
+
+function scheduleFarsideFallbackTimer(tabId, url, state, delay = FARSIDE_LOAD_FALLBACK_MS) {
+  if (!api.webNavigation?.onCompleted || tabId === undefined || tabId < 0) return
+  const target = farsideFallbackRedirect(url, state)
+  if (!target) return
+  clearFarsideFallbackTimer(tabId)
+  const timer = setTimeout(async () => {
+    pendingFarsideFallbacks.delete(tabId)
+    try {
+      if (api.tabs?.get) {
+        const tab = await callApi(api.tabs, 'get', tabId)
+        if (tab?.url !== url) return
+      }
+      await callApi(api.tabs, 'update', tabId, { url: target })
+    } catch {}
+  }, delay)
+  pendingFarsideFallbacks.set(tabId, timer)
 }
 
 function applyProfile(state, profileId) {
@@ -1401,11 +1566,25 @@ api.tabs?.onUpdated?.addListener(async (tabId, changeInfo, tab) => {
 })
 api.webNavigation?.onBeforeNavigate?.addListener(async details => {
   if (details.frameId !== 0 || details.tabId === undefined || !/^https?:/.test(details.url || '')) return
-  try { await redirectNavigationUrl(details.tabId, details.url) } catch {}
+  try {
+    const state = await getState()
+    scheduleFarsideFallbackTimer(details.tabId, details.url, state)
+    await redirectNavigationUrl(details.tabId, details.url)
+  } catch {}
+})
+api.webNavigation?.onCompleted?.addListener(details => {
+  if (details.frameId === 0 && details.tabId !== undefined) clearFarsideFallbackTimer(details.tabId)
 })
 api.webNavigation?.onErrorOccurred?.addListener(async details => {
   if (details.frameId !== 0 || details.tabId === undefined || !/^https?:/.test(details.url || '')) return
-  try { await redirectNavigationUrl(details.tabId, details.url, { rescue: true }) } catch {}
+  const error = String(details.error || '').toLowerCase()
+  clearFarsideFallbackTimer(details.tabId)
+  if (/cancel|abort|interrupted|blocked/.test(error)) return
+  try {
+    const state = await getState()
+    if (farsideFallbackRedirect(details.url, state)) scheduleFarsideFallbackTimer(details.tabId, details.url, state, FARSIDE_ERROR_FALLBACK_MS)
+    else await redirectNavigationUrl(details.tabId, details.url, { rescue: true })
+  } catch {}
 })
 
 api.contextMenus?.onClicked?.addListener(async (info, tab) => {
@@ -1455,13 +1634,23 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const state = await getState()
     switch (message?.type) {
       case 'getState':
-        return { state, catalog: SERVICE_CATALOG, profiles: { ...PROFILES, ...(state.customProfiles ?? {}) }, limitations: RESEARCHED_LIMITATIONS, permissions: await permissionState(), activeTabPermissions: await activeTabPermissionState() }
+        return { state, catalog: SERVICE_CATALOG, profiles: { ...PROFILES, ...(state.customProfiles ?? {}) }, farside: { baseUrl: farsideBaseUrl(state), supportedFrontends: FARSIDE_FRONTEND_MAP }, limitations: RESEARCHED_LIMITATIONS, permissions: await permissionState(), activeTabPermissions: await activeTabPermissionState() }
       case 'setGlobalEnabled': {
         state.globalEnabled = Boolean(message.enabled)
         await saveState(state)
         const diagnostics = await rebuildRules()
         await updateCurrentActionIcon()
         return { diagnostics }
+      }
+      case 'setFarsideBaseUrl': {
+        state.farsideBaseUrl = normalizeFarsideBaseUrl(message.url)
+        await saveState(state)
+        return { diagnostics: await rebuildRules(), farsideBaseUrl: state.farsideBaseUrl }
+      }
+      case 'setFarsideFallbackEnabled': {
+        state.farsideFallbackEnabled = Boolean(message.enabled)
+        await saveState(state)
+        return { farsideFallbackEnabled: state.farsideFallbackEnabled }
       }
       case 'updateService': {
         const service = state.services[message.serviceId]
@@ -1597,6 +1786,20 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { url: applyTemplateRedirect(message.url, state) }
       case 'diagnoseUrl':
         return { diagnosis: diagnoseUrl(message.url, state) }
+      case 'farsideFallbackForUrl':
+        return { url: farsideFallbackRedirect(message.url, state) }
+      case 'farsideForUrl':
+        return { url: farsideRedirectForUrl(message.url, state) }
+      case 'farsideCurrent': {
+        const tab = await activeTab()
+        return { url: tab?.url ? farsideRedirectForUrl(tab.url, state) : null }
+      }
+      case 'openFarsideCurrent': {
+        const tab = await activeTab()
+        const url = tab?.url ? farsideRedirectForUrl(tab.url, state) : null
+        if (url && tab?.id !== undefined) await openRedirectInTab(tab.id, url, tabLastGoodUrls.get(tab.id))
+        return { url }
+      }
       case 'diagnoseUrls':
         return { diagnoses: (message.urls ?? []).slice(0, 200).map(url => diagnoseUrl(url, state)) }
       case 'diagnoseCurrent':

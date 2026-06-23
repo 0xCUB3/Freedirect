@@ -85,16 +85,30 @@ const api = globalThis.chrome ?? globalThis.browser
     const values = [...(config.favoriteInstances || []), ...(config.customInstances || []), ...frontend.instances]
     return Array.from(new Set(values)).map(value => `<option value="${esc(value)}" ${value === config.instance ? 'selected' : ''}>${esc(value)}</option>`).join('')
   }
+  function farsideHealth(config) {
+    const base = current?.state?.farsideBaseUrl || current?.farside?.baseUrl || 'https://farside.link'
+    return config.health?.[base]
+  }
+  function healthBadgeFor(config) {
+    const health = config.health?.[config.instance]
+    if (!health) return { text: t('notChecked'), className: '', title: '' }
+    const checkedAt = Date.parse(health.checkedAt || '')
+    const stale = Number.isFinite(checkedAt) && Date.now() - checkedAt > HEALTH_STALE_MS
+    if (health.ok && stale) return { text: `${t('stale')} · ${health.latencyMs ?? 'ok'} ms`, className: 'warn', title: '' }
+    if (health.ok) return { text: `${health.latencyMs ?? 'ok'} ms`, className: 'ok', title: '' }
+    if (current?.state?.farsideFallbackEnabled) {
+      const fallback = farsideHealth(config)
+      if (fallback?.ok) return { text: 'Fallback', className: 'warn', title: 'Selected instance failed; Farside is reachable' }
+      if (fallback && !fallback.ok) return { text: t('failed'), className: 'bad', title: fallback.error || health.error || 'failed' }
+      return { text: 'Fallback', className: 'warn', title: 'Selected instance failed; will retry through Farside' }
+    }
+    return { text: t('failed'), className: 'bad', title: health.error || 'failed' }
+  }
   function healthLabel(config, service) {
     const frontends = effectiveFrontends(service, config)
     if (frontends[config.frontend]?.appProtocol) return `<span class="badge na">${esc(t('notApplicable'))}</span>`
-    const health = config.health?.[config.instance]
-    if (!health) return `<span class="badge">${esc(t('notChecked'))}</span>`
-    const checkedAt = Date.parse(health.checkedAt || '')
-    const stale = Number.isFinite(checkedAt) && Date.now() - checkedAt > HEALTH_STALE_MS
-    if (health.ok && stale) return `<span class="badge warn">${esc(t('stale'))} · ${health.latencyMs ?? 'ok'} ms</span>`
-    if (health.ok) return `<span class="badge ok">${health.latencyMs ?? 'ok'} ms</span>`
-    return `<span class="badge bad" title="${esc(health.error || 'failed')}">${esc(t('failed'))}</span>`
+    const badge = healthBadgeFor(config)
+    return `<span class="badge ${esc(badge.className)}" title="${esc(badge.title)}">${esc(badge.text)}</span>`
   }
   function openCustomDialog(serviceId) {
     customServiceId = serviceId
@@ -133,6 +147,8 @@ const api = globalThis.chrome ?? globalThis.browser
   function render(data) {
     current = data
     $('profile').innerHTML = optionList(Object.entries(data.profiles), data.state.profile, profile => profile.name)
+    if ($('farsideBaseUrl')) $('farsideBaseUrl').value = data.state.farsideBaseUrl || data.farside?.baseUrl || 'https://farside.link'
+    if ($('farsideFallbackEnabled')) $('farsideFallbackEnabled').checked = data.state.farsideFallbackEnabled !== false
     const query = $('serviceSearch').value.trim().toLowerCase()
     const filter = serviceFilter
     const rows = Object.entries(data.catalog).filter(([id, service]) => {
@@ -180,11 +196,12 @@ const api = globalThis.chrome ?? globalThis.browser
     try { render(await msg('getState')) }
     catch (error) { $('diag').innerHTML = `<span class="bad">${esc(error?.message || String(error))}</span>` }
   }
-  function setRowHealthText(serviceId, text, className = '') {
+  function setRowHealthText(serviceId, text, className = '', title = '') {
     const badge = document.querySelector(`.service[data-service="${CSS.escape(serviceId)}"] .badge`)
     if (!badge) return
     badge.className = `badge ${className}`.trim()
     badge.textContent = text
+    badge.title = title || ''
   }
   function setRowInstance(serviceId, instance) {
     const select = document.querySelector(`.service[data-service="${CSS.escape(serviceId)}"] [data-field="instance"]`)
@@ -216,6 +233,11 @@ const api = globalThis.chrome ?? globalThis.browser
       setRowHealthText(serviceId, 'checking…')
       await nextPaint()
       const health = await msg('checkInstanceHealth', { serviceId, instance: config.instance }).then(result => result.health, () => ({ ok: false }))
+      if (!health?.ok && current?.state?.farsideFallbackEnabled) {
+        setRowHealthText(serviceId, 'checking fallback…', 'warn')
+        await nextPaint()
+        await msg('checkInstanceHealth', { serviceId, instance: current.state.farsideBaseUrl || current.farside?.baseUrl || 'https://farside.link' }).catch(() => null)
+      }
       if (!health?.ok && selectBestWhenUnchecked) {
         setRowHealthText(serviceId, 'finding best…', 'warn')
         await nextPaint()
@@ -224,11 +246,9 @@ const api = globalThis.chrome ?? globalThis.browser
     }
     const nextConfig = await refreshServiceState(serviceId).catch(() => null)
     const activeConfig = nextConfig || current?.state?.services?.[serviceId]
-    const activeHealth = activeConfig?.health?.[activeConfig.instance]
+    const badge = healthBadgeFor(activeConfig)
     setRowInstance(serviceId, activeConfig?.instance)
-    if (!activeHealth) setRowHealthText(serviceId, t('notChecked'))
-    else if (activeHealth.ok) setRowHealthText(serviceId, `${activeHealth.latencyMs ?? 'ok'} ms`, 'ok')
-    else setRowHealthText(serviceId, t('failed'), 'bad')
+    setRowHealthText(serviceId, badge.text, badge.className, badge.title)
   }
   async function checkEnabledProgressively() {
     const ids = Object.keys(current?.state?.services || {}).filter(id => current.state.services[id].enabled)
@@ -321,7 +341,10 @@ const api = globalThis.chrome ?? globalThis.browser
     }
     try {
       if (button.dataset.action === 'favorite') await msg('toggleFavoriteInstance', { serviceId, instance })
-      if (button.dataset.action === 'health') await msg('checkInstanceHealth', { serviceId, instance })
+      if (button.dataset.action === 'health') {
+        await checkServiceOrBest(serviceId)
+        return
+      }
       if (button.dataset.action === 'custom') {
         openCustomDialog(serviceId)
         return
@@ -366,6 +389,8 @@ const api = globalThis.chrome ?? globalThis.browser
   })
   $('checkAll').addEventListener('click', event => runButtonAction(event.currentTarget, 'Checking selected instances…', checkEnabledProgressively, { refreshAfter: false }))
   $('bestAll').addEventListener('click', event => runButtonAction(event.currentTarget, 'Finding best instances…', selectBestEnabledProgressively, { refreshAfter: false }))
+  $('farsideFallbackEnabled').addEventListener('change', event => msg('setFarsideFallbackEnabled', { enabled: event.target.checked }).then(refresh))
+  $('saveFarsideBase').addEventListener('click', event => runButtonAction(event.currentTarget, 'Saving Farside URL…', () => msg('setFarsideBaseUrl', { url: $('farsideBaseUrl').value.trim() })))
   $('showCommands').addEventListener('click', async () => {
     const result = await msg('getCommands')
     $('commands').innerHTML = result.available ? result.commands.map(command => `<li>${esc(command.description || command.name)} — ${esc(command.shortcut || 'unassigned')}</li>`).join('') : `<li>${esc(result.reason || t('commandsUnavailable'))}</li>`

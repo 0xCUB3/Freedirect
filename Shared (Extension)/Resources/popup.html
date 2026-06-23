@@ -14,6 +14,7 @@
     h1 { margin: 0; font-size: 17px; line-height: 1.15; }
     button { width: 100%; min-height: 44px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--ink); padding: 10px 12px; font: inherit; cursor: pointer; }
     button.primary { border-color: transparent; background: var(--primary); color: white; font-weight: 650; }
+    button.small { min-height: 32px; padding: 6px 10px; border-radius: 10px; font-size: 12px; }
     button:disabled { cursor: not-allowed; opacity: 0.55; }
     button:focus-visible, input:focus-visible { outline: 3px solid color-mix(in oklab, var(--primary), white 45%); outline-offset: 2px; }
     .switch { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; white-space: nowrap; }
@@ -47,6 +48,7 @@
 
   <div class="actions">
     <button class="primary hidden" id="primaryAction">Open</button>
+    <button class="small hidden" id="farsideAction">Reload with Farside</button>
     <button id="options" data-i18n="popupSettings">Settings</button>
   </div>
 

@@ -4,6 +4,7 @@ const api = globalThis.chrome ?? globalThis.browser
 const $ = id => document.getElementById(id)
 const t = (key, substitutions) => api?.i18n?.getMessage(key, substitutions) || key
 let primaryAction = null
+let farsideUrl = null
 
 document.querySelectorAll('[data-i18n]').forEach(node => { node.textContent = t(node.dataset.i18n) })
 
@@ -57,9 +58,11 @@ function setPrimary(kind, label) {
   $('primaryAction').classList.toggle('hidden', !kind)
 }
 
-function render(payload, diagnosis) {
+function render(payload, diagnosis, farside) {
   const state = payload.state
   $('enabled').checked = !!state.globalEnabled
+  farsideUrl = farside?.url || null
+  $('farsideAction').classList.toggle('hidden', !farsideUrl)
 
   if (diagnosis?.redirectUrl) {
     $('pageMatch').textContent = diagnosis.serviceName
@@ -80,8 +83,8 @@ function render(payload, diagnosis) {
 
 async function refresh() {
   try {
-    const [state, current] = await Promise.all([msg('getState'), msg('diagnoseCurrent')])
-    render(state, current.diagnosis)
+    const [state, current, farside] = await Promise.all([msg('getState'), msg('diagnoseCurrent'), msg('farsideCurrent')])
+    render(state, current.diagnosis, farside)
   } catch (error) {
     $('status').textContent = t('popupError', [error?.message || String(error)])
     $('pageMatch').textContent = t('popupNoMatch')
@@ -95,6 +98,7 @@ $('primaryAction').addEventListener('click', () => {
   if (primaryAction === 'redirect') return msg('redirectCurrent').then(refresh)
   if (primaryAction === 'reverse') return msg('reverseCurrent').then(refresh)
 })
+$('farsideAction').addEventListener('click', () => msg('openFarsideCurrent').then(refresh))
 async function openSettings() {
   const url = api.runtime.getURL?.('options.html')
   if (url && api.tabs?.create) {

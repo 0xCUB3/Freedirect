@@ -25,6 +25,8 @@
     .field-label { color: var(--muted); font-size: 12px; line-height: 1.2; }
     .profile-row, .list-meta { display: flex; gap: 6px; align-items: center; }
     .profile-control { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+    .switch { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; }
+    .switch input { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); }
     .profile-row select { min-width: 120px; max-width: 180px; }
     .filter-button { width: 28px; min-width: 28px; height: 28px; padding: 0; border-color: transparent; background: transparent; color: var(--muted); border-radius: 8px; line-height: 1; }
     .filter-button svg { display: block; margin: auto; }
@@ -56,6 +58,7 @@
     summary { cursor: pointer; font-weight: 650; }
     .details-grid { display: grid; gap: 12px; margin-top: 12px; }
     .details-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .details-row.align-end { align-items: end; }
     .muted { color: var(--muted); }
     ul { margin: 8px 0 0; padding-left: 18px; }
     pre, textarea { width: 100%; min-height: 150px; background: var(--bg); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; overflow: auto; }
@@ -128,6 +131,18 @@
       <pre id="sanityReport" aria-live="polite">Sanity check not run.</pre>
       <ul id="commands" class="muted" aria-live="polite"></ul>
       <ul id="bypasses" class="muted" aria-live="polite"></ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>Farside</summary>
+    <div class="details-grid">
+      <p class="muted">Fallback keeps your selected instance as the default, then retries through <a href="https://farside.link" target="_blank" rel="noreferrer">Farside</a> when needed.</p>
+      <label class="switch"><input id="farsideFallbackEnabled" type="checkbox"> <span>Use Farside fallback</span></label>
+      <div class="details-row align-end">
+        <label class="field"><span class="field-label">Base URL</span><input id="farsideBaseUrl" type="text" placeholder="https://farside.link" aria-label="Farside base URL"></label>
+        <button id="saveFarsideBase" type="button">Save Farside URL</button>
+      </div>
     </div>
   </details>
 

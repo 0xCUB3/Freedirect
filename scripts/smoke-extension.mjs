@@ -59,9 +59,10 @@ const browser = {
     onClicked: event('contextMenus.onClicked')
   },
   commands: { onCommand: event('commands.onCommand'), async getAll() { return [{ name: 'redirect-current', description: 'Redirect the current page', shortcut: 'Alt+Shift+R' }] } },
-  webNavigation: { onBeforeNavigate: event('webNavigation.onBeforeNavigate') },
+  webNavigation: { onBeforeNavigate: event('webNavigation.onBeforeNavigate'), onCompleted: event('webNavigation.onCompleted'), onErrorOccurred: event('webNavigation.onErrorOccurred') },
   tabs: {
     async query() { return [{ id: 1, url: activeTabUrl }] },
+    async get(tabId) { return { id: tabId, url: activeTabUrl } },
     async update(tabId, details = {}) {
       if (details.url) activeTabUrl = details.url
       return { id: tabId, url: activeTabUrl }
@@ -163,6 +164,27 @@ for (const [input, expected] of redirectSamples) {
   const result = await send({ type: 'previewRedirect', url: input })
   if (result.url !== expected) throw new Error(`Redirect mismatch for ${input}: ${result.url} !== ${expected}`)
 }
+let farsideReverse = await send({ type: 'previewReverse', url: 'https://farside.link/invidious/watch?v=test' })
+if (farsideReverse.url !== 'https://www.youtube.com/watch?v=test') throw new Error(`Expected Farside reverse, got ${farsideReverse.url}`)
+await send({ type: 'setFarsideBaseUrl', url: 'https://cf.farside.link/path' })
+let farside = await send({ type: 'farsideForUrl', url: 'https://www.youtube.com/watch?v=test' })
+if (farside.url !== 'https://cf.farside.link/invidious/watch?v=test&local=false') throw new Error(`Expected custom Farside URL, got ${farside.url}`)
+const directWithFallback = await send({ type: 'previewRedirect', url: 'https://www.youtube.com/watch?v=test' })
+if (directWithFallback.url !== 'https://inv.thepixora.com/watch?v=test&local=false') throw new Error('Expected Farside fallback to keep selected instance first')
+const fallbackUrl = await send({ type: 'farsideFallbackForUrl', url: 'https://inv.thepixora.com/watch?v=test&local=false' })
+if (fallbackUrl.url !== 'https://cf.farside.link/invidious/watch?v=test&local=false') throw new Error(`Expected Farside fallback URL, got ${fallbackUrl.url}`)
+activeTabUrl = 'https://inv.thepixora.com/watch?v=test&local=false'
+await listeners['webNavigation.onErrorOccurred']({ frameId: 0, tabId: 1, url: activeTabUrl, error: 'Frame load interrupted' })
+if (activeTabUrl !== 'https://inv.thepixora.com/watch?v=test&local=false') throw new Error('Expected benign interrupted navigation to stay on selected instance')
+await listeners['webNavigation.onErrorOccurred']({ frameId: 0, tabId: 1, url: activeTabUrl, error: 'NSURLErrorDomain -1003' })
+if (activeTabUrl !== 'https://inv.thepixora.com/watch?v=test&local=false') throw new Error('Expected navigation error fallback to wait before changing the tab')
+listeners['webNavigation.onCompleted']({ frameId: 0, tabId: 1 })
+await send({ type: 'setFarsideFallbackEnabled', enabled: false })
+const disabledFallback = await send({ type: 'farsideFallbackForUrl', url: 'https://inv.thepixora.com/watch?v=test&local=false' })
+if (disabledFallback.url) throw new Error('Expected disabled global Farside fallback')
+await send({ type: 'setFarsideFallbackEnabled', enabled: true })
+await send({ type: 'setFarsideBaseUrl', url: 'https://farside.link' })
+activeTabUrl = 'https://www.youtube.com/watch?v=test'
 const diagnosis = await send({ type: 'diagnoseUrl', url: 'https://www.youtube.com/watch?v=test' })
 if (diagnosis.diagnosis.serviceId !== 'youtube' || diagnosis.diagnosis.redirectUrl !== 'https://inv.thepixora.com/watch?v=test&local=false') throw new Error('Expected YouTube URL diagnosis')
 const batchDiagnosis = await send({ type: 'diagnoseUrls', urls: ['https://www.youtube.com/watch?v=test', 'https://www.reddit.com/r/privacy/', 'https://example.com/'] })
