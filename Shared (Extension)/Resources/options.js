@@ -216,7 +216,7 @@ const api = globalThis.chrome ?? globalThis.browser
       setRowHealthText(serviceId, 'checking…')
       await nextPaint()
       const health = await msg('checkInstanceHealth', { serviceId, instance: config.instance }).then(result => result.health, () => ({ ok: false }))
-      if (!health?.ok) {
+      if (!health?.ok && selectBestWhenUnchecked) {
         setRowHealthText(serviceId, 'finding best…', 'warn')
         await nextPaint()
         await msg('selectBestInstance', { serviceId }).catch(() => null)

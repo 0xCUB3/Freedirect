@@ -23,8 +23,8 @@ Settings are stored in `browser.storage.local` under `freedirectState`. The nati
 
 ## Redirect pipeline
 
-1. Static DNR rules cover selected high-impact defaults before dynamic state is loaded.
-2. Dynamic DNR rules are generated from the configured service catalog.
+1. Static DNR rules cover selected high-impact defaults only during first-install bootstrap.
+2. Dynamic DNR rules are generated from the configured service catalog; once initialized, the static ruleset is disabled so stale defaults cannot override custom instances.
 3. `webNavigation.onBeforeNavigate` and `tabs.onUpdated` handle app-protocol redirects and Safari race cases.
 4. `webNavigation.onErrorOccurred` retries redirectable failed main-frame navigations, useful when DNS blocking wins before Safari finishes extension handling.
 5. `content-script.js` provides a last-resort `document_start` redirect path when a page can load.

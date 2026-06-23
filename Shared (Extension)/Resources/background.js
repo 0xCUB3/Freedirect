@@ -769,6 +769,7 @@ async function rebuildRules() {
     reason: rejected.reason || 'unsupported regex'
   }))
   if (!diagnostics.lastError && diagnostics.lastRejectedRules.length) diagnostics.lastError = `${diagnostics.lastRejectedRules.length} dynamic redirect rules were skipped.`
+  await setStaticRulesetEnabled(false)
   return await withStateWrite(latest => {
     latest.diagnostics = { ...latest.diagnostics, ...diagnostics }
     return latest.diagnostics
@@ -1324,12 +1325,14 @@ async function createMenus() {
   try { await menusCreating } finally { menusCreating = null }
 }
 
-async function ensureStaticRulesEnabled() {
+async function setStaticRulesetEnabled(shouldEnable) {
   const dnr = api.declarativeNetRequest
   if (!dnr?.getEnabledRulesets || !dnr?.updateEnabledRulesets) return
   try {
     const enabled = await callApi(dnr, 'getEnabledRulesets')
-    if (!enabled?.includes(STATIC_RULESET_ID)) await callApi(dnr, 'updateEnabledRulesets', { enableRulesetIds: [STATIC_RULESET_ID] })
+    const isEnabled = enabled?.includes(STATIC_RULESET_ID)
+    if (shouldEnable && !isEnabled) await callApi(dnr, 'updateEnabledRulesets', { enableRulesetIds: [STATIC_RULESET_ID] })
+    if (!shouldEnable && isEnabled) await callApi(dnr, 'updateEnabledRulesets', { disableRulesetIds: [STATIC_RULESET_ID] })
   } catch {}
 }
 
@@ -1342,7 +1345,10 @@ async function ensureInitialized({ rebuildIfMissing = false } = {}) {
     if (stored.freedirectState.schemaVersion !== migrated.schemaVersion) await saveState(migrated)
   }
   try { await loadPublicInstances({ bundledOnly: true }) } catch {}
-  await ensureStaticRulesEnabled()
+  // Static DNR rules are only an install-time bootstrap. Once the extension has
+  // storage/dynamic rules, leaving static defaults enabled can override custom
+  // instances on iOS if Safari wakes the extension late.
+  await setStaticRulesetEnabled(false)
   await createMenus()
   await updateCurrentActionIcon()
   if (rebuildIfMissing && api.declarativeNetRequest?.getDynamicRules) {

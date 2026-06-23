@@ -7,6 +7,7 @@ const listeners = {}
 const storage = {}
 let dynamicRules = []
 let sessionRules = []
+let enabledRulesets = ['freedirect_static_defaults']
 let activeHealthFetches = 0
 let maxHealthFetches = 0
 
@@ -29,6 +30,11 @@ const browser = {
     async getDynamicRules() { return dynamicRules },
     async updateDynamicRules({ removeRuleIds = [], addRules = [] }) {
       dynamicRules = dynamicRules.filter(rule => !removeRuleIds.includes(rule.id)).concat(addRules)
+    },
+    async getEnabledRulesets() { return enabledRulesets },
+    async updateEnabledRulesets({ enableRulesetIds = [], disableRulesetIds = [] }) {
+      enabledRulesets = enabledRulesets.filter(id => !disableRulesetIds.includes(id))
+      enabledRulesets = Array.from(new Set([...enabledRulesets, ...enableRulesetIds]))
     },
     async getSessionRules() { return sessionRules },
     async updateSessionRules({ removeRuleIds = [], addRules = [] }) {
@@ -96,6 +102,7 @@ vm.runInContext(readFileSync('Shared (Extension)/Resources/background.js', 'utf8
 
 await listeners['runtime.onInstalled']()
 if (dynamicRules.length < 1) throw new Error('Expected dynamic rules after install')
+if (enabledRulesets.includes('freedirect_static_defaults')) throw new Error('Expected static bootstrap ruleset to be disabled after install')
 if (!storage.freedirectState) throw new Error('Expected stored Freedirect state')
 
 let response = await send({ type: 'getState' })
@@ -239,6 +246,7 @@ const commands = await send({ type: 'getCommands' })
 if (!commands.available || !commands.commands.some(command => command.name === 'redirect-current')) throw new Error('Expected command diagnostics')
 
 const rules = await send({ type: 'getRules' })
+if (rules.enabledRulesets.includes('freedirect_static_defaults')) throw new Error('Expected disabled static ruleset in rule diagnostics')
 if (!rules.dynamicRules.length) throw new Error('Expected rule preview data')
 if (!rules.rulePreview?.some(rule => rule.serviceId === 'youtube' && rule.frontendName)) throw new Error('Expected attributed rule preview data')
 
