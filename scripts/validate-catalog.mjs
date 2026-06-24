@@ -62,16 +62,22 @@ for (const [serviceId, service] of Object.entries(catalog)) {
 const extraSamples = Object.keys(samples).filter(serviceId => !catalog[serviceId])
 for (const serviceId of extraSamples) errors.push(`${serviceId}: sample has no catalog service`)
 
-const strictRules = vm.runInContext(`(() => { const state = defaultState(); applyProfile(state, 'strict'); return makeRules(state); })()`, context)
-if (!strictRules.length) errors.push('strict profile generated no rules')
-if (strictRules.length > 5000) errors.push(`strict profile generated too many rules: ${strictRules.length}`)
-const ruleIds = new Set()
-for (const rule of strictRules) {
-  if (ruleIds.has(rule.id)) errors.push(`duplicate DNR rule id ${rule.id}`)
-  ruleIds.add(rule.id)
-  if (rule.action?.type !== 'redirect') errors.push(`rule ${rule.id}: expected redirect action`)
-  if (!rule.condition?.regexFilter) errors.push(`rule ${rule.id}: missing regexFilter`)
+function checkRuleSet(name, rules) {
+  if (!rules.length) errors.push(`${name} generated no rules`)
+  if (rules.length > 5000) errors.push(`${name} generated too many rules: ${rules.length}`)
+  const ruleIds = new Set()
+  for (const rule of rules) {
+    if (ruleIds.has(rule.id)) errors.push(`${name}: duplicate DNR rule id ${rule.id}`)
+    ruleIds.add(rule.id)
+    if (!['redirect', 'allow'].includes(rule.action?.type)) errors.push(`${name} rule ${rule.id}: unexpected action`)
+    if (!rule.condition?.regexFilter) errors.push(`${name} rule ${rule.id}: missing regexFilter`)
+  }
 }
+
+const strictRules = vm.runInContext(`(() => { const state = defaultState(); applyProfile(state, 'strict'); return makeRules(state); })()`, context)
+checkRuleSet('strict profile', strictRules)
+const staticOverrideRules = vm.runInContext(`(() => { const state = defaultState(); state.services.youtube.frontend = 'freetube'; state.services.youtube.instance = 'freetube://'; state.services.reddit.enabled = false; state.services.twitter.enabled = false; return makeRules(state); })()`, context)
+checkRuleSet('static override profile', staticOverrideRules)
 
 if (errors.length) {
   console.error(errors.map(error => `catalog validation: ${error}`).join('\n'))

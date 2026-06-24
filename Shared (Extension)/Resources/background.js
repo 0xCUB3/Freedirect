@@ -58,6 +58,7 @@ const TOOLBAR_ICONS = {
 }
 let bundledInstancesLoaded = false
 let stateWriteQueue = Promise.resolve()
+let ruleRebuildQueue = Promise.resolve()
 const tabLastGoodUrls = new Map()
 const recentNavigationRedirects = new Map()
 const pendingFarsideFallbacks = new Map()
@@ -765,18 +766,17 @@ function ruleRecords(state) {
 
 function staticOverrideRules(state) {
   const rules = []
-  const offsets = { youtube: 1, reddit: 5, twitter: 7 }
-  for (const serviceId of Object.keys(offsets)) {
+  let id = STATIC_OVERRIDE_RULE_ID_BASE + 1
+  for (const serviceId of ['youtube', 'reddit', 'twitter']) {
     const service = SERVICE_CATALOG[serviceId]
     const config = state.services[serviceId]
     const frontend = serviceFrontends(service, config)[config?.frontend]
     if (state.globalEnabled && config?.enabled && !frontend?.appProtocol) continue
     const templates = serviceId === 'youtube' ? service.frontends.invidious.rules : service.rules
-    let index = 0
     for (const originalTemplate of templates) {
       for (const template of dnrTemplates(originalTemplate)) {
         rules.push({
-          id: STATIC_OVERRIDE_RULE_ID_BASE + offsets[serviceId] + index++,
+          id: id++,
           priority: 100,
           action: { type: 'allow' },
           condition: { regexFilter: template.source, resourceTypes: ['main_frame'] }
@@ -811,7 +811,13 @@ async function supportedDnrRules(rules) {
   return { rules: accepted, rejected }
 }
 
-async function rebuildRules() {
+function rebuildRules() {
+  const run = ruleRebuildQueue.catch(() => null).then(rebuildRulesNow)
+  ruleRebuildQueue = run.then(() => null, () => null)
+  return run
+}
+
+async function rebuildRulesNow() {
   const state = await getState()
   const existing = await callApi(api.declarativeNetRequest, 'getDynamicRules')
   const removeRuleIds = existing.map(rule => rule.id)
@@ -827,7 +833,8 @@ async function rebuildRules() {
     diagnostics.lastRuleCount = addRules.length
   } catch (error) {
     try {
-      await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds, addRules: [] })
+      const clearRuleIds = Array.from(new Set([...removeRuleIds, ...addRules.map(rule => rule.id)]))
+      await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: clearRuleIds, addRules: [] })
       for (const rule of addRules) {
         try {
           await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: [], addRules: [rule] })

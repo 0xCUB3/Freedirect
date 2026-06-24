@@ -16,6 +16,16 @@ function event(name) {
   return { addListener(callback) { listeners[name] = callback } }
 }
 
+function updateRuleset(currentRules, { removeRuleIds = [], addRules = [] }) {
+  const nextRules = currentRules.filter(rule => !removeRuleIds.includes(rule.id))
+  const ids = new Set(nextRules.map(rule => rule.id))
+  for (const rule of addRules) {
+    if (ids.has(rule.id)) throw new Error(`Rule ${rule.id} does not have a unique ID.`)
+    ids.add(rule.id)
+  }
+  return nextRules.concat(addRules)
+}
+
 const browser = {
   storage: {
     local: {
@@ -29,8 +39,8 @@ const browser = {
   },
   declarativeNetRequest: {
     async getDynamicRules() { return dynamicRules },
-    async updateDynamicRules({ removeRuleIds = [], addRules = [] }) {
-      dynamicRules = dynamicRules.filter(rule => !removeRuleIds.includes(rule.id)).concat(addRules)
+    async updateDynamicRules(options) {
+      dynamicRules = updateRuleset(dynamicRules, options)
     },
     async getEnabledRulesets() { return enabledRulesets },
     async updateEnabledRulesets({ enableRulesetIds = [], disableRulesetIds = [] }) {
@@ -38,8 +48,8 @@ const browser = {
       enabledRulesets = Array.from(new Set([...enabledRulesets, ...enableRulesetIds]))
     },
     async getSessionRules() { return sessionRules },
-    async updateSessionRules({ removeRuleIds = [], addRules = [] }) {
-      sessionRules = sessionRules.filter(rule => !removeRuleIds.includes(rule.id)).concat(addRules)
+    async updateSessionRules(options) {
+      sessionRules = updateRuleset(sessionRules, options)
     }
   },
   runtime: {
