@@ -8,38 +8,40 @@
     :root { color-scheme: light dark; --bg: oklch(1 0 0); --surface: oklch(0.975 0.003 91.3); --elevated: oklch(0.955 0.006 91.3); --ink: oklch(0.205 0.018 255); --muted: oklch(0.46 0.018 255); --primary: oklch(0.68 0.155 87); --border: oklch(0.88 0.008 255); --error: oklch(0.55 0.18 28); --success: oklch(0.55 0.12 155); --warning: oklch(0.62 0.13 75); }
     @media (prefers-color-scheme: dark) { :root { --bg: oklch(0.12 0 0); --surface: oklch(0.18 0.006 255); --elevated: oklch(0.23 0.01 255); --ink: oklch(0.93 0 0); --muted: oklch(0.72 0.012 255); --border: oklch(0.32 0.012 255); } }
     * { box-sizing: border-box; }
-    body { margin: 0; color: var(--ink); background: var(--bg); font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; color: var(--ink); background: var(--bg); font: -apple-system-body; }
     main { max-width: 1240px; margin: 0 auto; padding: 18px clamp(12px, 3vw, 28px) 36px; }
     header { display: grid; grid-template-columns: minmax(170px, 1fr) auto; gap: 12px; align-items: center; padding: 12px 0 14px; margin-bottom: 10px; border-bottom: 1px solid var(--border); }
-    h1 { margin: 0; font-size: 22px; line-height: 1.15; letter-spacing: -0.01em; }
-    h2 { margin: 0 0 10px; font-size: 16px; }
-    button, select, input[type='text'], input[type='search'], textarea { border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--ink); padding: 8px 10px; font: inherit; }
-    button { cursor: pointer; }
+    h1 { margin: 0; font-size: 20px; font-weight: 640; line-height: 1.2; }
+    h2 { margin: 0 0 10px; font-size: 15px; font-weight: 590; }
+    button, select, input[type='text'], input[type='search'], textarea { border: 1px solid var(--border); border-radius: 9px; background: var(--bg); color: var(--ink); padding: 7px 10px; font: inherit; font-size: 13px; }
+    button { cursor: pointer; transition: background 0.12s; }
+    button:active { background: var(--border); }
     button:disabled { cursor: not-allowed; opacity: 0.55; }
-    button.primary { background: var(--primary); border-color: transparent; color: white; font-weight: 650; }
-    button.small { padding: 5px 8px; font-size: 12px; }
-    button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid color-mix(in oklab, var(--primary), white 45%); outline-offset: 2px; }
+    button.primary { background: var(--primary); border-color: transparent; color: white; font-weight: 590; }
+    button.primary:active { background: color-mix(in oklch, var(--primary), black 18%); }
+    button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2.5px solid color-mix(in oklch, var(--primary), white 40%); outline-offset: 2px; }
     .toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; align-items: center; }
+    .profile-control { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+    .profile-row { display: flex; gap: 6px; align-items: center; }
+    .profile-row select { min-width: 120px; max-width: 180px; }
     .filters { display: grid; grid-template-columns: minmax(230px, 1fr) auto auto auto; gap: 8px; align-items: end; margin: 12px 0 8px; }
     .field { display: grid; gap: 4px; }
     .field-label { color: var(--muted); font-size: 12px; line-height: 1.2; }
-    .profile-row, .list-meta { display: flex; gap: 6px; align-items: center; }
-    .profile-control { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
     .switch { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; }
     .switch input { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); }
-    .profile-row select { min-width: 120px; max-width: 180px; }
-    .filter-button { width: 28px; min-width: 28px; height: 28px; padding: 0; border-color: transparent; background: transparent; color: var(--muted); border-radius: 8px; line-height: 1; }
-    .filter-button svg { display: block; margin: auto; }
-    .filter-button:hover, .filter-button.active { background: var(--elevated); border-color: var(--border); color: var(--ink); }
-    .list-meta { justify-content: space-between; min-height: 28px; margin: 0 0 8px; }
+    .list-meta { display: flex; justify-content: space-between; align-items: center; min-height: 28px; margin: 0 0 8px; }
     .summary { color: var(--muted); font-size: 12px; }
-    .list-controls { display: inline-flex; align-items: center; gap: 4px; }
+    .list-controls { display: inline-flex; align-items: center; gap: 8px; }
+    .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+    .segmented button { border: none; border-radius: 0; padding: 5px 10px; font-size: 12px; color: var(--muted); background: transparent; min-height: 28px; }
+    .segmented button:not(:last-child) { border-right: 1px solid var(--border); }
+    .segmented button.active { background: var(--elevated); color: var(--ink); font-weight: 590; }
     .sort-control { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
     .sort-control select { padding: 5px 26px 5px 8px; border-radius: 8px; font-size: 12px; }
-    .services { border: 1px solid var(--border); border-radius: 16px; background: var(--surface); overflow: clip; }
-    .service { display: grid; grid-template-columns: 34px minmax(220px, 1.15fr) minmax(160px, 0.72fr) minmax(300px, 1.35fr) 84px 220px; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--border); }
+    .services { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); overflow: clip; }
+    .service { display: grid; grid-template-columns: 34px minmax(220px, 1.15fr) minmax(160px, 0.72fr) minmax(260px, 1.35fr) 84px 140px; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--border); }
     .service:first-child { border-top: 0; }
-    .service:hover { background: color-mix(in oklab, var(--elevated), transparent 30%); }
+    .service:hover { background: color-mix(in oklch, var(--elevated), transparent 30%); }
     .service.disabled { opacity: 0.68; }
     .toggle { display: grid; place-items: center; }
     .name { min-width: 0; }
@@ -55,21 +57,22 @@
     .badge.na { color: var(--muted); }
     .ok { color: var(--success); } .bad { color: var(--error); } .warn { color: var(--warning); }
     details { margin-top: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 12px; }
-    summary { cursor: pointer; font-weight: 650; }
+    summary { cursor: pointer; font-weight: 590; }
     .details-grid { display: grid; gap: 12px; margin-top: 12px; }
     .details-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .details-row.align-end { align-items: end; }
     .muted { color: var(--muted); }
     ul { margin: 8px 0 0; padding-left: 18px; }
     pre, textarea { width: 100%; min-height: 150px; background: var(--bg); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; overflow: auto; }
-    dialog { width: min(520px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 16px; padding: 0; background: var(--bg); color: var(--ink); box-shadow: 0 18px 60px color-mix(in oklab, black, transparent 78%); }
-    dialog::backdrop { background: color-mix(in oklab, black, transparent 62%); }
+    dialog { width: min(520px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 14px; padding: 0; background: var(--bg); color: var(--ink); box-shadow: 0 18px 60px color-mix(in oklch, black, transparent 78%); }
+    dialog::backdrop { background: color-mix(in oklch, black, transparent 62%); }
     .dialog-body { display: grid; gap: 12px; padding: 16px; }
     .dialog-body h2 { margin: 0; }
     .dialog-body label { display: grid; gap: 5px; color: var(--muted); }
     .dialog-body label span { font-size: 12px; }
     .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
     .danger { color: var(--error); }
+    .empty-state { color: var(--muted); font-size: 13px; font-style: italic; }
     @media (max-width: 940px) { header, .filters, .service { grid-template-columns: 1fr; } .toolbar > button { width: 100%; } .list-meta { align-items: flex-start; flex-direction: column; } .toolbar, .action-buttons { justify-content: flex-start; } .profile-control { align-items: flex-start; flex-direction: column; width: 100%; } .profile-row, .profile-row select { width: 100%; max-width: none; } .row-actions { display: flex; flex-wrap: wrap; gap: 6px; } .toggle { place-items: start; } }
   </style>
 </head>
@@ -78,7 +81,7 @@
   <header>
     <h1 data-i18n="optionsTitle">Freedirect Settings</h1>
     <div class="toolbar">
-      <label class="profile-control"><span data-i18n="profile">Profile</span><span class="profile-row"><select id="profile" data-i18n-aria-label="profile" aria-label="Profile"></select><button id="saveProfile" class="small" type="button">Save…</button></span></label>
+      <label class="profile-control"><span data-i18n="profile">Profile</span><span class="profile-row"><select id="profile" data-i18n-aria-label="profile" aria-label="Profile"></select><button id="saveProfile" type="button">Save…</button></span></label>
       <button id="refreshInstances" data-i18n="refreshInstances">Update instance lists</button>
       <button id="rebuild" class="primary" data-i18n="rebuildRules">Rebuild rules</button>
     </div>
@@ -95,12 +98,28 @@
     <div class="list-meta">
       <div id="serviceSummary" class="summary" aria-live="polite">—</div>
       <div class="list-controls">
-        <button id="serviceFilter" class="filter-button" type="button" aria-label="Showing all services" title="Showing all services"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 3.5h12L9.4 8.7v3.8l-2.8 1V8.7L2 3.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
+        <div class="segmented" id="serviceFilter" role="radiogroup" aria-label="Filter services">
+          <button data-filter="all" class="active" role="radio" aria-checked="true">All</button>
+          <button data-filter="enabled" role="radio" aria-checked="false">Enabled</button>
+          <button data-filter="disabled" role="radio" aria-checked="false">Disabled</button>
+        </div>
         <label class="sort-control">Order <select id="sortOrder" aria-label="Sort services"><option value="smart">Smart</option><option value="name">Name</option><option value="enabled">Enabled first</option><option value="health">Health</option></select></label>
       </div>
     </div>
     <div id="services" class="services" aria-live="polite"></div>
   </section>
+
+  <dialog id="profileDialog">
+    <form method="dialog" class="dialog-body">
+      <h2 data-i18n="saveProfileTitle">Save profile</h2>
+      <p class="muted" data-i18n="saveProfileHint">Save the current enabled services as a named profile.</p>
+      <label><span data-i18n="profileName">Profile name</span><input id="profileName" type="text" data-i18n-placeholder="profileNamePlaceholder" placeholder="e.g. My setup" autofocus></label>
+      <div class="dialog-actions">
+        <button value="cancel" data-i18n="cancel">Cancel</button>
+        <button id="confirmSaveProfile" class="primary" value="save" type="button" data-i18n="save">Save</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="customDialog">
     <form method="dialog" class="dialog-body">
@@ -117,7 +136,7 @@
     </form>
   </dialog>
 
-  <details open>
+  <details>
     <summary data-i18n="diagnostics">Diagnostics</summary>
     <div class="details-grid">
       <p id="diag" class="muted" aria-live="polite">Loading…</p>
@@ -169,8 +188,9 @@
   <details>
     <summary data-i18n="backup">Backup</summary>
     <div class="details-grid">
+      <p class="muted" data-i18n="backupHint">Export your settings as JSON. Paste a backup and press Import to restore.</p>
       <div class="details-row"><button id="export" data-i18n="export">Export</button><button id="import" data-i18n="import">Import</button></div>
-      <textarea id="backup" spellcheck="false" data-i18n-aria-label="backupState" aria-label="Backup JSON" placeholder="Exported JSON appears here. Paste JSON and press Import to restore."></textarea>
+      <textarea id="backup" spellcheck="false" data-i18n-aria-label="backupState" aria-label="Backup JSON" data-i18n-placeholder="backupPlaceholder" placeholder="Exported JSON appears here. Paste JSON and press Import to restore."></textarea>
     </div>
   </details>
 </main>

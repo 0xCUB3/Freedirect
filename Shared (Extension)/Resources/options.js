@@ -190,7 +190,7 @@ const api = globalThis.chrome ?? globalThis.browser
       </div>`
     }).join('')
     $('diag').innerHTML = `${data.state.diagnostics.lastRuleCount || 0} dynamic rules. Last generated: ${esc(data.state.diagnostics.lastGeneratedAt || 'never')}. Instance lists: ${esc(data.state.diagnostics.lastInstanceRefreshAt || 'built-in')}. ${data.state.diagnostics.lastInstanceRefreshError ? `<span class="bad">${esc(data.state.diagnostics.lastInstanceRefreshError)}</span>` : ''} ${data.state.diagnostics.lastError ? `<span class="bad">${esc(data.state.diagnostics.lastError)}</span>` : '<span class="ok">No generator errors.</span>'}`
-    $('bypasses').innerHTML = (data.state.diagnostics.bypassedUrls || []).map(item => `<li>${esc(item)}</li>`).join('') || '<li>No temporary bypasses.</li>'
+    $('bypasses').innerHTML = (data.state.diagnostics.bypassedUrls || []).map(item => `<li>${esc(item)}</li>`).join('') || `<li class="empty-state">${esc(t('noBypasses')) || 'Bypasses let you temporarily visit an original site without redirecting. None are active.'}</li>`
   }
   async function refresh() {
     try { render(await msg('getState')) }
@@ -281,26 +281,42 @@ const api = globalThis.chrome ?? globalThis.browser
     await refresh()
   }
   $('profile').addEventListener('change', event => msg('applyProfile', { profile: event.target.value }).then(refresh))
-  $('saveProfile').addEventListener('click', async () => {
-    const name = prompt('Save current enabled services as profile')?.trim()
-    if (name) await msg('saveProfile', { name }).then(refresh)
+  $('saveProfile').addEventListener('click', () => {
+    $('profileName').value = ''
+    $('profileDialog').showModal()
   })
-  $('enableAll').addEventListener('click', event => runButtonAction(event.currentTarget, 'Enabling…', async () => { await msg('setAllServices', { enabled: true }); await refresh(); await checkEnabledProgressively() }, { refreshAfter: false }))
-  $('disableAll').addEventListener('click', event => runButtonAction(event.currentTarget, 'Disabling…', () => msg('setAllServices', { enabled: false })))
+  $('confirmSaveProfile').addEventListener('click', async () => {
+    const name = $('profileName').value.trim()
+    if (!name) return
+    $('profileDialog').close()
+    await msg('saveProfile', { name }).then(refresh)
+  })
+  $('enableAll').addEventListener('click', () => {
+    if (!confirm('Enable all services? This will enable every redirect.')) return
+    runButtonAction(event.currentTarget, 'Enabling…', async () => { await msg('setAllServices', { enabled: true }); await refresh(); await checkEnabledProgressively() }, { refreshAfter: false })
+  })
+  $('disableAll').addEventListener('click', () => {
+    if (!confirm('Disable all services? No redirects will be active.')) return
+    runButtonAction(event.currentTarget, 'Disabling…', () => msg('setAllServices', { enabled: false }))
+  })
   $('resetDefaults').addEventListener('click', () => { if (confirm('Reset Freedirect settings to defaults?')) msg('resetState').then(refresh) })
   $('serviceSearch').addEventListener('input', () => { if (current) render(current) })
-  function updateServiceFilterButton() {
-    const label = serviceFilter === 'all' ? 'Showing all services' : serviceFilter === 'enabled' ? 'Showing enabled services' : 'Showing disabled services'
-    $('serviceFilter').setAttribute('aria-label', label)
-    $('serviceFilter').title = label
-    $('serviceFilter').classList.toggle('active', serviceFilter !== 'all')
+  function updateServiceFilterButtons() {
+    const buttons = $('serviceFilter').querySelectorAll('button')
+    buttons.forEach(btn => {
+      const isActive = btn.dataset.filter === serviceFilter
+      btn.classList.toggle('active', isActive)
+      btn.setAttribute('aria-checked', String(isActive))
+    })
   }
-  $('serviceFilter').addEventListener('click', () => {
-    serviceFilter = serviceFilter === 'all' ? 'enabled' : serviceFilter === 'enabled' ? 'disabled' : 'all'
-    updateServiceFilterButton()
+  $('serviceFilter').addEventListener('click', event => {
+    const button = event.target.closest('button[data-filter]')
+    if (!button) return
+    serviceFilter = button.dataset.filter
+    updateServiceFilterButtons()
     if (current) render(current)
   })
-  updateServiceFilterButton()
+  updateServiceFilterButtons()
   $('sortOrder').addEventListener('change', () => { if (current) render(current) })
   $('services').addEventListener('change', async event => {
     const row = event.target.closest('.service')
@@ -393,7 +409,7 @@ const api = globalThis.chrome ?? globalThis.browser
   $('saveFarsideBase').addEventListener('click', event => runButtonAction(event.currentTarget, 'Saving Farside URL…', () => msg('setFarsideBaseUrl', { url: $('farsideBaseUrl').value.trim() })))
   $('showCommands').addEventListener('click', async () => {
     const result = await msg('getCommands')
-    $('commands').innerHTML = result.available ? result.commands.map(command => `<li>${esc(command.description || command.name)} — ${esc(command.shortcut || 'unassigned')}</li>`).join('') : `<li>${esc(result.reason || t('commandsUnavailable'))}</li>`
+    $('commands').innerHTML = result.available ? result.commands.map(command => `<li>${esc(command.description || command.name)} — ${esc(command.shortcut || t('unassigned'))}</li>`).join('') : `<li class="empty-state">${esc(result.reason || t('commandsUnavailable')) || 'Keyboard shortcuts let you redirect or reverse the current page. Add one in Safari Settings → Extensions → Freedirect.'}</li>`
   })
   $('clearBypasses').addEventListener('click', () => msg('clearBypasses').then(refresh))
   $('debugRedirect').addEventListener('click', async () => { $('debugResult').textContent = (await msg('previewRedirect', { url: $('debugUrl').value.trim() })).url || 'No enabled redirect template matched this URL.' })
