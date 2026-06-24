@@ -63,6 +63,7 @@ function render(payload, diagnosis, farside) {
   $('enabled').checked = !!state.globalEnabled
   farsideUrl = farside?.url || null
   $('farsideAction').classList.toggle('hidden', !farsideUrl)
+  $('farsideAction').classList.toggle('secondary', !!farsideUrl)
 
   if (diagnosis?.redirectUrl) {
     $('pageMatch').textContent = diagnosis.serviceName
@@ -78,7 +79,7 @@ function render(payload, diagnosis, farside) {
     setPrimary(null, '')
   }
 
-  $('status').textContent = state.globalEnabled ? t('popupReady') : t('popupPaused')
+  $('status').className = state.globalEnabled ? 'status ok' : 'status'
 }
 
 async function refresh() {
