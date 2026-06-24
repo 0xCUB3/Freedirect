@@ -38,8 +38,8 @@
     .segmented button.active { background: var(--elevated); color: var(--ink); font-weight: 590; }
     .sort-control { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
     .sort-control select { padding: 5px 26px 5px 8px; border-radius: 8px; font-size: 12px; }
-    .services { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); overflow: clip; }
-    .service { display: grid; grid-template-columns: 34px minmax(220px, 1.15fr) minmax(160px, 0.72fr) minmax(260px, 1.35fr) 84px 140px; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--border); }
+    .services { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+    .service { display: grid; grid-template-columns: 34px minmax(200px, 1.2fr) minmax(140px, 0.7fr) minmax(240px, 1.1fr) minmax(160px, auto); gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--border); }
     .service:first-child { border-top: 0; }
     .service:hover { background: color-mix(in oklch, var(--elevated), transparent 30%); }
     .service.disabled { opacity: 0.68; }
@@ -48,12 +48,11 @@
     .name strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .hosts { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .service select { min-width: 0; width: 100%; }
-    .row-actions { display: contents; }
-    .action-buttons { display: flex; gap: 6px; justify-content: flex-end; align-items: center; white-space: nowrap; }
+    .action-buttons { display: flex; gap: 6px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
     button.icon { width: 28px; min-width: 28px; height: 28px; padding: 0; border-color: transparent; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; }
     button.icon.active { color: var(--primary); }
     button.icon:hover { background: var(--elevated); border-color: var(--border); }
-    .badge { display: inline-flex; justify-content: center; align-items: center; width: 84px; min-height: 24px; border-radius: 999px; padding: 3px 7px; background: var(--elevated); color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .badge { display: inline-flex; justify-content: center; align-items: center; min-width: 52px; min-height: 24px; border-radius: 999px; padding: 3px 8px; background: var(--elevated); color: var(--muted); font-size: 12px; white-space: nowrap; flex-shrink: 0; }
     .badge.na { color: var(--muted); }
     .ok { color: var(--success); } .bad { color: var(--error); } .warn { color: var(--warning); }
     details { margin-top: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 12px; }
@@ -73,7 +72,7 @@
     .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
     .danger { color: var(--error); }
     .empty-state { color: var(--muted); font-size: 13px; font-style: italic; }
-    @media (max-width: 940px) { header, .filters, .service { grid-template-columns: 1fr; } .toolbar > button { width: 100%; } .list-meta { align-items: flex-start; flex-direction: column; } .toolbar, .action-buttons { justify-content: flex-start; } .profile-control { align-items: flex-start; flex-direction: column; width: 100%; } .profile-row, .profile-row select { width: 100%; max-width: none; } .row-actions { display: flex; flex-wrap: wrap; gap: 6px; } .toggle { place-items: start; } }
+    @media (max-width: 940px) { header, .filters, .service { grid-template-columns: 1fr; } .toolbar > button { width: 100%; } .list-meta { align-items: flex-start; flex-direction: column; } .toolbar, .action-buttons { justify-content: flex-start; } .profile-control { align-items: flex-start; flex-direction: column; width: 100%; } .profile-row, .profile-row select { width: 100%; max-width: none; } .action-buttons { flex-wrap: wrap; gap: 6px; } .toggle { place-items: start; } }
   </style>
 </head>
 <body>
