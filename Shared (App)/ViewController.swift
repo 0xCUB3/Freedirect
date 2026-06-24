@@ -68,26 +68,13 @@ final class ViewController: PlatformViewController, WKNavigationDelegate, WKScri
 
     private func openExtensionSettings() {
 #if os(iOS)
-        let urlStrings = [
-            "settings-navigation://com.apple.Settings.Apps/com.apple.mobilesafari/WEB_EXTENSIONS/Freedirect",
-            "settings-navigation://com.apple.Settings.Apps/com.apple.mobilesafari/WEB_EXTENSIONS",
-            "App-Prefs:SAFARI&path=WEB_EXTENSIONS/Freedirect",
-            "App-Prefs:SAFARI&path=WEB_EXTENSIONS",
-            UIApplication.openSettingsURLString
-        ]
-        openFirstAvailableURL(from: urlStrings.compactMap(URL.init(string:)))
-#endif
-    }
-
-#if os(iOS)
-
-    private func openFirstAvailableURL(from urls: [URL]) {
-        guard let url = urls.first else { return }
-        UIApplication.shared.open(url, options: [:]) { success in
-            if !success {
-                self.openFirstAvailableURL(from: Array(urls.dropFirst()))
+        SFSafariSettings.openExtensionsSettings(forIdentifiers: [extensionBundleIdentifier]) { error in
+            if let error = error {
+                // Fallback: open the app's own Settings page so the user can navigate manually
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                UIApplication.shared.open(url)
             }
         }
-    }
 #endif
+    }
 }
