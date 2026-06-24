@@ -1,1 +1,49 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Freedirect</title><style>body{font:16px system-ui,-apple-system,sans-serif;max-width:680px;margin:48px auto;padding:0 20px;line-height:1.5}a{color:inherit}</style></head><body><h1>Freedirect redirected this navigation</h1><p>If this page appears unexpectedly, open Freedirect Settings and rebuild rules or review Safari site permissions.</p></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title data-i18n="blockedTitle">Redirected — Freedirect</title>
+<style>
+  :root { color-scheme: light dark; --bg: oklch(1 0 0); --ink: oklch(0.205 0.018 255); --muted: oklch(0.46 0.018 255); --primary: oklch(0.68 0.155 87); --border: oklch(0.88 0.008 255); }
+  @media (prefers-color-scheme: dark) { :root { --bg: oklch(0.12 0 0); --ink: oklch(0.93 0 0); --muted: oklch(0.72 0.012 255); --border: oklch(0.32 0.012 255); } }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; padding: 48px 20px; max-width: 440px; color: var(--ink); background: var(--bg); font: -apple-system-body; text-align: center; -webkit-text-size-adjust: 100%; }
+  h1 { font-size: 20px; font-weight: 640; line-height: 1.25; margin: 0 0 10px; }
+  p { color: var(--muted); line-height: 1.45; margin: 0 0 18px; }
+  a, button { font: inherit; }
+  button { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 8px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--ink); font-size: 13px; cursor: pointer; transition: background 0.12s; }
+  button:active { background: var(--border); }
+  button:focus-visible { outline: 2.5px solid color-mix(in oklch, var(--primary), white 40%); outline-offset: 2px; }
+  button.primary { border-color: transparent; background: var(--primary); color: white; font-weight: 590; }
+  button.primary:active { background: color-mix(in oklch, var(--primary), black 18%); }
+  .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  @media (max-width: 380px) { body { padding: 32px 16px; } }
+</style>
+</head>
+<body>
+  <h1 data-i18n="blockedHeading">Navigation redirected</h1>
+  <p data-i18n="blockedExplanation">Freedirect redirected this page to an alternative frontend. If this appears unexpectedly, the redirect may have landed on the wrong URL.</p>
+  <div class="actions">
+    <button class="primary" id="openSettings" data-i18n="blockedSettings">Open Settings</button>
+    <button id="retryOriginal" data-i18n="blockedRetry">Try original site</button>
+  </div>
+  <script>
+  const api = globalThis.chrome ?? globalThis.browser
+  document.querySelectorAll('[data-i18n]').forEach(n => {
+    const msg = api?.i18n?.getMessage(n.dataset.i18n)
+    if (msg) n.textContent = msg
+  })
+  document.getElementById('openSettings').addEventListener('click', () => {
+    const url = api?.runtime?.getURL?.('options.html')
+    if (url && api?.tabs?.create) api.tabs.create({ url }).catch(() => api.runtime.openOptionsPage())
+    else api?.runtime?.openOptionsPage?.()
+  })
+  document.getElementById('retryOriginal').addEventListener('click', () => {
+    const url = api?.runtime?.getURL?.('options.html')
+    if (api?.tabs?.update) api.tabs.update({ url: location.href })
+    else history.back()
+  })
+  </script>
+</body>
+</html>
