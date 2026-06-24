@@ -68,13 +68,20 @@ final class ViewController: PlatformViewController, WKNavigationDelegate, WKScri
 
     private func openExtensionSettings() {
 #if os(iOS)
-        SFSafariSettings.openExtensionsSettings(forIdentifiers: [extensionBundleIdentifier]) { error in
-            if let error = error {
-                // Fallback: open the app's own Settings page so the user can navigate manually
-                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-                UIApplication.shared.open(url)
+        if #available(iOS 26.2, *) {
+            SFSafariSettings.openExtensionsSettings(forIdentifiers: [extensionBundleIdentifier]) { error in
+                if error != nil { Self.openAppSettings() }
             }
+        } else {
+            Self.openAppSettings()
         }
 #endif
     }
+
+#if os(iOS)
+    private static func openAppSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+#endif
 }
