@@ -3,28 +3,29 @@
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'">
-
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-
     <link rel="stylesheet" href="../Style.css">
     <script src="../Script.js" defer></script>
 </head>
 <body>
-    <img src="../Icon.png" width="128" height="128" alt="Freedirect Icon">
-    <section class="platform-ios instructions" aria-label="iPhone and iPad setup instructions">
-        <p>Turn on Freedirect in Safari Extensions:</p>
-        <button class="platform-ios open-extension-settings">Open Safari Extension Settings</button>
+    <img src="../Icon.png" width="128" height="128" alt="">
+    <h2>Freedirect</h2>
+
+    <p class="platform-mac state-unknown">Turn on Freedirect in Safari Extensions to start redirecting.</p>
+    <p class="platform-mac state-on">Freedirect is on and redirecting. Configure services in the extension popup.</p>
+    <p class="platform-mac state-off">Freedirect is turned off. Turn it on in Safari Extensions preferences.</p>
+
+    <section class="platform-ios instructions" aria-label="iPhone and iPad setup">
+        <p>Turn on Freedirect in Safari:</p>
         <ol>
-            <li>Open Settings.</li>
-            <li>Go to Apps → Safari → Extensions, or search Settings for “Safari Extensions”.</li>
+            <li>Open Settings → Apps → Safari → Extensions, or search for “Safari Extensions”.</li>
             <li>Select Freedirect and turn it on.</li>
-            <li>Set website access to Allow for all sites.</li>
+            <li>Set website access to <strong>Allow for all sites</strong>.</li>
         </ol>
         <p class="note">All redirect settings live inside the Freedirect extension page in Safari.</p>
     </section>
-    <p class="platform-mac state-unknown">You can turn on Freedirect’s extension in Safari Extensions preferences.</p>
-    <p class="platform-mac state-on">Freedirect’s extension is currently on. You can turn it off in Safari Extensions preferences.</p>
-    <p class="platform-mac state-off">Freedirect’s extension is currently off. You can turn it on in Safari Extensions preferences.</p>
-    <button class="platform-mac open-preferences">Quit and Open Safari Extensions Preferences…</button>
+
+    <button class="platform-mac open-preferences primary">Open Safari Extensions Preferences…</button>
+    <button class="platform-ios open-extension-settings primary">Open Safari Extension Settings</button>
 </body>
 </html>

@@ -6,8 +6,21 @@
 
 :root {
     color-scheme: light dark;
-
+    --bg: oklch(1 0 0);
+    --ink: oklch(0.205 0.018 255);
+    --muted: oklch(0.46 0.018 255);
+    --primary: oklch(0.68 0.155 87);
+    --border: oklch(0.88 0.008 255);
     --spacing: 20px;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: oklch(0.12 0 0);
+        --ink: oklch(0.93 0 0);
+        --muted: oklch(0.72 0.012 255);
+        --border: oklch(0.32 0.012 255);
+    }
 }
 
 html {
@@ -19,12 +32,12 @@ body {
     align-items: center;
     justify-content: center;
     flex-direction: column;
-
     gap: var(--spacing);
     margin: 0 calc(var(--spacing) * 2);
     height: 100%;
-
-    font: -apple-system-short-body;
+    color: var(--ink);
+    background: var(--bg);
+    font: -apple-system-body;
     text-align: center;
 }
 
@@ -40,10 +53,6 @@ body.platform-mac .platform-ios {
     display: none;
 }
 
-body.platform-ios .platform-mac {
-    display: none;
-}
-
 body:not(.state-on, .state-off) :is(.state-on, .state-off) {
     display: none;
 }
@@ -54,6 +63,27 @@ body.state-on :is(.state-off, .state-unknown) {
 
 body.state-off :is(.state-on, .state-unknown) {
     display: none;
+}
+
+img {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 32px;
+    border-radius: 16px;
+}
+
+h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 640;
+    line-height: 1.25;
+}
+
+p {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.45;
+    max-width: 28em;
 }
 
 .instructions {
@@ -76,13 +106,42 @@ body.state-off :is(.state-on, .state-unknown) {
 }
 
 .instructions .note {
-    color: color-mix(in srgb, currentColor 68%, transparent);
+    color: var(--muted);
     font-size: 0.92em;
     margin-top: 1em;
 }
 
 button {
-    font-size: 1em;
+    min-height: 38px;
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    color: color-mix(in oklch, var(--primary), white 32%);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 590;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+
+button:active {
+    background: var(--border);
+}
+
+button:focus-visible {
+    outline: 2.5px solid color-mix(in oklch, var(--primary), white 40%);
+    outline-offset: 2px;
+}
+
+button.primary {
+    border-color: transparent;
+    background: var(--primary);
+    color: white;
+}
+
+button.primary:active {
+    background: color-mix(in oklch, var(--primary), black 18%);
 }
 
 .open-extension-settings {
