@@ -2,10 +2,6 @@
 
 const api = globalThis.chrome ?? globalThis.browser
 const CURRENT_URL = location.href
-const REDDIT_DEFAULTS = {
-  redlib: ['https://redlib.net', 'https://safereddit.com', 'https://libreddit.bus-hit.me'],
-  libreddit: ['https://libreddit.projectsegfau.lt']
-}
 
 function runtimeError() {
   return api?.runtime?.lastError?.message
@@ -42,65 +38,6 @@ function send(message) {
   })
 }
 
-function storageGet(keys) {
-  return new Promise(resolve => {
-    if (!api?.storage?.local?.get) return resolve({})
-    try {
-      const result = api.storage.local.get(keys, value => resolve(value || {}))
-      if (result?.then) result.then(value => resolve(value || {}), () => resolve({}))
-    } catch {
-      try {
-        const result = api.storage.local.get(keys)
-        if (result?.then) result.then(value => resolve(value || {}), () => resolve({}))
-        else resolve(result || {})
-      } catch {
-        resolve({})
-      }
-    }
-  })
-}
-
-function selectedRedditInstance(config) {
-  const frontend = config?.frontend in REDDIT_DEFAULTS ? config.frontend : 'redlib'
-  const candidates = [...(config?.favoriteInstances || []), ...(config?.customInstances || []), ...REDDIT_DEFAULTS[frontend]]
-  if (config?.mode === 'rotating' && candidates.length) {
-    const day = Math.floor(Date.now() / 86400000)
-    return candidates[day % candidates.length]
-  }
-  return config?.instance || candidates[0]
-}
-
-function redditRedirect(url, state) {
-  if (isBypassedUrl(url.href, state)) return null
-  if (state?.globalEnabled === false) return null
-  const config = state?.services?.reddit
-  if (config?.enabled === false) return null
-  const instance = selectedRedditInstance(config).replace(/\/$/, '')
-  const href = url.href
-  let target = href.replace(/^https?:\/\/(www\.|old\.|new\.)?reddit\.com\/(.*)/, `${instance}/$2`)
-  if (target !== href) return target
-  target = href.replace(/^https?:\/\/redd\.it\/(.*)/, `${instance}/$1`)
-  return target !== href ? target : null
-}
-
-function bypassRegexForUrl(value) {
-  const url = new URL(value)
-  const path = url.pathname === '/' ? '/' : url.pathname.replace(/\/+$/, '')
-  const pathPattern = path === '/' ? '/?' : `${escapeRegex(path)}/?`
-  return `^https?://${escapeRegex(url.hostname)}${pathPattern}([?#].*)?$`
-}
-
-function isBypassedUrl(value, state) {
-  return (state?.diagnostics?.bypassedUrls ?? []).some(bypassed => {
-    try { return new RegExp(bypassRegexForUrl(bypassed)).test(new URL(value).href) }
-    catch { return value === bypassed }
-  })
-}
-
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
 function unwrappedOutboundUrl(href) {
   let url
   try { url = new URL(href, location.href) } catch { return null }
@@ -131,7 +68,6 @@ async function rewriteRedirectableLinks() {
   if (linkRewriteRunning || window.top !== window || !document?.querySelectorAll) return
   linkRewriteRunning = true
   try {
-    const stored = await storageGet(['freedirectState'])
     const anchors = Array.from(document.querySelectorAll('a[href]')).slice(0, 600)
     const pendingUrls = []
     const anchorsByUrl = new Map()
@@ -140,15 +76,10 @@ async function rewriteRedirectableLinks() {
       if (!original || original === anchor.href && anchor.dataset.freedirectChecked === original) continue
       anchor.dataset.freedirectChecked = original
       let target = linkRewriteCache.get(original)
-      if (target === undefined) {
-        try { target = redditRedirect(new URL(original), stored.freedirectState) } catch { target = null }
-      }
-      if (target) {
-        linkRewriteCache.set(original, target)
-        rewriteAnchorHref(anchor, target)
+      if (target !== undefined) {
+        if (target) rewriteAnchorHref(anchor, target)
         continue
       }
-      if (linkRewriteCache.has(original)) continue
       if (!anchorsByUrl.has(original)) {
         anchorsByUrl.set(original, [])
         pendingUrls.push(original)
@@ -192,24 +123,10 @@ function startLinkRewriteObserver() {
   } catch {}
 }
 
-async function runStorageRedirect() {
-  if (window.top !== window) return false
-  if (!/^https?:$/.test(location.protocol)) return false
-  let url
-  try { url = new URL(CURRENT_URL) } catch { return false }
-  if (!/(^|\.)reddit\.com$/.test(url.hostname) && url.hostname !== 'redd.it') return false
-  const stored = await storageGet(['freedirectState'])
-  const target = redditRedirect(url, stored.freedirectState)
-  if (!target || target === CURRENT_URL) return false
-  location.replace(target)
-  return true
-}
-
 async function runFallbackRedirect() {
   if (window.top !== window) return
   if (!/^https?:$/.test(location.protocol)) return
   try {
-    if (await runStorageRedirect()) return
     const response = await send({ type: 'diagnoseUrl', url: CURRENT_URL, source: 'content-script' })
     const target = response?.diagnosis?.redirectUrl
     if (!target || target === CURRENT_URL) return
