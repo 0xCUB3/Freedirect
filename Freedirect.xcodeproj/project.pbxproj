@@ -53,8 +53,6 @@
 		862606ED2FE80EDC005BA1FC /* options.js in Resources */ = {isa = PBXBuildFile; fileRef = 862606EB2FE80EDC005BA1FC /* options.js */; };
 		862606EE2FE80EDC005BA1FC /* instances.json in Resources */ = {isa = PBXBuildFile; fileRef = 862606F02FE80EDC005BA1FC /* instances.json */; };
 		862606EF2FE80EDC005BA1FC /* instances.json in Resources */ = {isa = PBXBuildFile; fileRef = 862606F02FE80EDC005BA1FC /* instances.json */; };
-		862606F22FE80EDC005BA1FC /* static_rules.json in Resources */ = {isa = PBXBuildFile; fileRef = 862606F12FE80EDC005BA1FC /* static_rules.json */; };
-		862606F32FE80EDC005BA1FC /* static_rules.json in Resources */ = {isa = PBXBuildFile; fileRef = 862606F12FE80EDC005BA1FC /* static_rules.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -131,7 +129,6 @@
 		862606EA2FE80EDC005BA1FC /* popup.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = popup.js; path = Resources/popup.js; sourceTree = "<group>"; };
 		862606EB2FE80EDC005BA1FC /* options.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = options.js; path = Resources/options.js; sourceTree = "<group>"; };
 		862606F02FE80EDC005BA1FC /* instances.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = instances.json; path = Resources/instances.json; sourceTree = "<group>"; };
-		862606F12FE80EDC005BA1FC /* static_rules.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = static_rules.json; path = Resources/static_rules.json; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -263,7 +260,6 @@
 				862606EA2FE80EDC005BA1FC /* popup.js */,
 				862606CB2FE80EDC005BA1FC /* manifest.json */,
 				862606F02FE80EDC005BA1FC /* instances.json */,
-				862606F12FE80EDC005BA1FC /* static_rules.json */,
 				862606CC2FE80EDC005BA1FC /* options.html */,
 				862606EB2FE80EDC005BA1FC /* options.js */,
 				862606CD2FE80EDC005BA1FC /* blocked.html */,
@@ -421,7 +417,6 @@
 			files = (
 				862606D72FE80EDC005BA1FC /* manifest.json in Resources */,
 				862606EF2FE80EDC005BA1FC /* instances.json in Resources */,
-				862606F32FE80EDC005BA1FC /* static_rules.json in Resources */,
 				862606D92FE80EDC005BA1FC /* blocked.html in Resources */,
 				862606D52FE80EDC005BA1FC /* images in Resources */,
 				862606D82FE80EDC005BA1FC /* options.html in Resources */,
@@ -438,7 +433,6 @@
 			files = (
 				862606D12FE80EDC005BA1FC /* manifest.json in Resources */,
 				862606EE2FE80EDC005BA1FC /* instances.json in Resources */,
-				862606F22FE80EDC005BA1FC /* static_rules.json in Resources */,
 				862606D32FE80EDC005BA1FC /* blocked.html in Resources */,
 				862606CF2FE80EDC005BA1FC /* images in Resources */,
 				862606D22FE80EDC005BA1FC /* options.html in Resources */,

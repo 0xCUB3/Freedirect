@@ -25,15 +25,7 @@
   "background": {
     "service_worker": "background.js"
   },
-  "declarative_net_request": {
-    "rule_resources": [
-      {
-        "id": "freedirect_static_defaults",
-        "enabled": true,
-        "path": "static_rules.json"
-      }
-    ]
-  },
+  "declarative_net_request": {},
   "content_scripts": [
     {
       "matches": [

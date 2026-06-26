@@ -32,6 +32,7 @@
   "popupRedirectPage": { "message": "Redirect page" },
   "popupOpenOriginal": { "message": "Open original" },
   "popupBypassUrl": { "message": "Bypass URL" },
+  "popupFarside": { "message": "Reload with Farside" },
   "popupCopyOriginal": { "message": "Copy original" },
   "popupSettings": { "message": "Settings" },
   "popupRequestAccess": { "message": "Request access" },

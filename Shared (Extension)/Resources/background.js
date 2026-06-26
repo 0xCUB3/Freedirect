@@ -3,14 +3,12 @@
 const api = globalThis.chrome ?? globalThis.browser
 const RULE_ID_BASE = 1000
 const SESSION_RULE_ID_BASE = 900000
-const STATIC_OVERRIDE_RULE_ID_BASE = 910000
 const MAX_RULES = 5000
 const HEALTH_TIMEOUT_MS = 6000
 const BEST_INSTANCE_HEALTH_TIMEOUT_MS = 2500
 const BEST_INSTANCE_CONCURRENCY = 8
 const INSTANCE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 const INSTANCE_SNAPSHOT_PATH = 'instances.json'
-const STATIC_RULESET_ID = 'freedirect_static_defaults'
 const INSTANCE_SOURCES = [
   'https://raw.githubusercontent.com/libredirect/instances/main/data.json',
   'https://codeberg.org/LibRedirect/instances/raw/branch/main/data.json'
@@ -711,10 +709,6 @@ function templateSubstitution(instance, path, { dnr = false } = {}) {
   return base + (dnr ? path.replaceAll('$', '\\') : path)
 }
 
-function dnrTemplates(template) {
-  return template.dnrRules ?? [template]
-}
-
 function ruleRecords(state) {
   if (!state.globalEnabled) return []
   const records = []
@@ -726,12 +720,10 @@ function ruleRecords(state) {
     const frontendId = config.frontend in frontends ? config.frontend : service.defaultFrontend
     const frontend = frontends[frontendId]
     if (frontend.appProtocol) continue
-    const useFarside = false
     const instance = selectedInstance(serviceId, state)
     const templates = frontend.rules ?? service.rules
-    for (const originalTemplate of templates) {
-      for (const template of dnrTemplates(originalTemplate)) {
-      const path = useFarside ? farsidePathForFrontend(frontendId, template.path) : template.path
+    for (const template of templates) {
+      const path = template.path
       if (records.length >= MAX_RULES || !path) break
       const substitution = templateSubstitution(instance, path, { dnr: true })
       const rule = {
@@ -751,44 +743,20 @@ function ruleRecords(state) {
         serviceId,
         serviceName: service.name,
         frontendId,
-        frontendName: `${frontends[frontendId].name}${useFarside ? ' via Farside' : ''}`,
-        routing: useFarside ? 'always' : configuredRouting(service, config, frontendId),
+        frontendName: frontends[frontendId].name,
+        routing: configuredRouting(service, config, frontendId),
         instance,
         source: template.source,
         substitution,
         rule
       })
-      }
     }
   }
   return records
 }
 
-function staticOverrideRules(state) {
-  const rules = []
-  let id = STATIC_OVERRIDE_RULE_ID_BASE + 1
-  for (const serviceId of ['youtube', 'reddit', 'twitter']) {
-    const service = SERVICE_CATALOG[serviceId]
-    const config = state.services[serviceId]
-    const frontend = serviceFrontends(service, config)[config?.frontend]
-    if (state.globalEnabled && config?.enabled && !frontend?.appProtocol) continue
-    const templates = serviceId === 'youtube' ? service.frontends.invidious.rules : service.rules
-    for (const originalTemplate of templates) {
-      for (const template of dnrTemplates(originalTemplate)) {
-        rules.push({
-          id: id++,
-          priority: 100,
-          action: { type: 'allow' },
-          condition: { regexFilter: template.source, resourceTypes: ['main_frame'] }
-        })
-      }
-    }
-  }
-  return rules
-}
-
 function makeRules(state) {
-  return [...staticOverrideRules(state), ...ruleRecords(state).map(record => record.rule)]
+  return ruleRecords(state).map(record => record.rule)
 }
 
 function rulePreview(state) {
@@ -821,7 +789,7 @@ async function rebuildRulesNow() {
   const state = await getState()
   const existing = await callApi(api.declarativeNetRequest, 'getDynamicRules')
   const removeRuleIds = existing.map(rule => rule.id)
-  const records = [...staticOverrideRules(state).map(rule => ({ rule, serviceId: 'static-override', serviceName: 'Static override', source: rule.condition.regexFilter })), ...ruleRecords(state)]
+  const records = ruleRecords(state)
   const requestedRules = records.map(record => record.rule)
   const validation = await supportedDnrRules(requestedRules)
   const addRules = validation.rules
@@ -855,7 +823,6 @@ async function rebuildRulesNow() {
     reason: rejected.reason || 'unsupported regex'
   }))
   if (!diagnostics.lastError && diagnostics.lastRejectedRules.length) diagnostics.lastError = `${diagnostics.lastRejectedRules.length} dynamic redirect rules were skipped.`
-  await setStaticRulesetEnabled(false)
   return await withStateWrite(latest => {
     latest.diagnostics = { ...latest.diagnostics, ...diagnostics }
     return latest.diagnostics
@@ -1529,17 +1496,6 @@ async function createMenus() {
   try { await menusCreating } finally { menusCreating = null }
 }
 
-async function setStaticRulesetEnabled(shouldEnable) {
-  const dnr = api.declarativeNetRequest
-  if (!dnr?.getEnabledRulesets || !dnr?.updateEnabledRulesets) return
-  try {
-    const enabled = await callApi(dnr, 'getEnabledRulesets')
-    const isEnabled = enabled?.includes(STATIC_RULESET_ID)
-    if (shouldEnable && !isEnabled) await callApi(dnr, 'updateEnabledRulesets', { enableRulesetIds: [STATIC_RULESET_ID] })
-    if (!shouldEnable && isEnabled) await callApi(dnr, 'updateEnabledRulesets', { disableRulesetIds: [STATIC_RULESET_ID] })
-  } catch {}
-}
-
 async function ensureInitialized({ rebuildIfMissing = false } = {}) {
   const stored = await storageGet(['freedirectState'])
   if (!stored.freedirectState) {
@@ -1549,10 +1505,6 @@ async function ensureInitialized({ rebuildIfMissing = false } = {}) {
     if (stored.freedirectState.schemaVersion !== migrated.schemaVersion) await saveState(migrated)
   }
   try { await loadPublicInstances({ bundledOnly: true }) } catch {}
-  // Static DNR rules are only an install-time bootstrap. Once the extension has
-  // storage/dynamic rules, leaving static defaults enabled can override custom
-  // instances on iOS if Safari wakes the extension late.
-  await setStaticRulesetEnabled(false)
   await createMenus()
   await updateCurrentActionIcon()
   if (rebuildIfMissing && api.declarativeNetRequest?.getDynamicRules) {
