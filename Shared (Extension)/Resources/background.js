@@ -55,6 +55,7 @@ const TOOLBAR_ICONS = {
   }
 }
 let bundledInstancesLoaded = false
+let publicInstanceRefreshStarted = false
 let stateWriteQueue = Promise.resolve()
 let ruleRebuildQueue = Promise.resolve()
 const tabLastGoodUrls = new Map()
@@ -1487,6 +1488,14 @@ async function safeCreateMenu(item) {
   })
 }
 
+function refreshPublicInstancesInBackground() {
+  if (publicInstanceRefreshStarted) return
+  publicInstanceRefreshStarted = true
+  setTimeout(() => {
+    loadPublicInstances().then(() => rebuildRules()).catch(() => {})
+  }, 0)
+}
+
 async function createMenus() {
   if (!api.contextMenus || menusCreated) return
   if (menusCreating) return menusCreating
@@ -1517,6 +1526,7 @@ async function ensureInitialized({ rebuildIfMissing = false } = {}) {
     if (stored.freedirectState.schemaVersion !== migrated.schemaVersion) await saveState(migrated)
   }
   try { await loadPublicInstances({ bundledOnly: true }) } catch {}
+  refreshPublicInstancesInBackground()
   await createMenus()
   await updateCurrentActionIcon()
   if (rebuildIfMissing && api.declarativeNetRequest?.getDynamicRules) {
