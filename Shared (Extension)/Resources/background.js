@@ -646,7 +646,7 @@ function mergePublicInstanceData(data) {
       const publicInstances = sanitizeStringArray(data[frontendId]?.clearnet, normalizeInstanceOrigin)
       if (!publicInstances.length) continue
       const before = frontend.instances.length
-      frontend.instances = Array.from(new Set([frontend.instances[0], ...publicInstances, ...frontend.instances.slice(1)].filter(Boolean)))
+      frontend.instances = publicInstances
       added += Math.max(0, frontend.instances.length - before)
     }
   }
@@ -709,7 +709,7 @@ function selectedInstance(serviceId, state) {
   const frontendId = config.frontend in frontends ? config.frontend : service.defaultFrontend
   const frontend = frontends[frontendId]
   const candidates = [...(config.favoriteInstances ?? []), ...(config.customInstances ?? []), ...frontend.instances]
-  return config.instance || candidates[0]
+  return candidates.includes(config.instance) ? config.instance : candidates[0]
 }
 
 function templateSubstitution(instance, path, { dnr = false } = {}) {
