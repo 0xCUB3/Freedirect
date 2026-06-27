@@ -1373,7 +1373,7 @@ async function allowOriginalUrl(tabId, url) {
   const rule = {
     id,
     priority: 100,
-    action: { type: 'allowAllRequests' },
+    action: { type: 'allow' },
     condition: { regexFilter: bypassRegexForUrl(original), resourceTypes: ['main_frame'] }
   }
   await callApi(api.declarativeNetRequest, 'updateSessionRules', { removeRuleIds, addRules: [rule] })
