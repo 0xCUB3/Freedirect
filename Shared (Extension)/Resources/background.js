@@ -730,7 +730,11 @@ function ruleRecords(state) {
     if (frontend.appProtocol) continue
     const instance = selectedInstance(serviceId, state)
     const templates = frontend.rules ?? service.rules
-    for (const template of templates) {
+    const dnrTemplates = templates.flatMap(template => {
+      if (!Array.isArray(template.dnrRules) || !template.dnrRules.length) return [template]
+      return template.dnrRules.map(dnrRule => ({ ...template, ...dnrRule, priority: dnrRule.priority ?? template.priority }))
+    })
+    for (const template of dnrTemplates) {
       const path = template.path
       if (records.length >= MAX_RULES || !path) break
       const substitution = templateSubstitution(instance, path, { dnr: true })
