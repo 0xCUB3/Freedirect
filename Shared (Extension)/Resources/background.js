@@ -67,6 +67,14 @@ function lastRuntimeError() {
   return api?.runtime?.lastError?.message
 }
 
+async function apiTabsUpdate(tabId, properties) {
+  // Safari's chrome.tabs.update can ignore callbacks, which makes callApi hang.
+  // Use a returned promise when present; otherwise this is fire-and-forget.
+  if (!api.tabs?.update) throw new Error('tabs.update unavailable')
+  const result = api.tabs.update(tabId, properties)
+  if (result?.then) await result
+}
+
 function callApi(target, method, ...args) {
   if (!target?.[method]) return Promise.reject(new Error(`${method} unavailable`))
   if (PROMISE_STYLE_API) {
@@ -202,7 +210,7 @@ const SERVICE_CATALOG = {
     originalHosts: ['tiktok.com', 'www.tiktok.com', 'vm.tiktok.com'],
     defaultFrontend: 'proxiTok',
     frontends: {
-      proxiTok: { name: 'ProxiTok', instances: ['https://proxitok.pabloferreiro.es', 'https://proxitok.pussthecat.org', 'https://tok.habedieeh.re', 'https://proxitok.privacydev.net', 'https://tok.artemislena.eu', 'https://tok.adminforge.de', 'https://cringe.whatever.social', 'https://proxitok.lunar.icu', 'https://proxitok.privacy.com.de', 'https://cringe.seitan-ayoub.lol', 'https://tt.opnxng.com', 'https://tiktok.wpme.pl', 'https://proxitok.r4fo.com', 'https://proxitok.belloworld.it', 'https://proxitok.herokuapp.com'] }
+      proxiTok: { name: 'ProxiTok', instances: ['https://proxitok.pabloferreiro.es', 'https://tt.opnxng.com', 'https://tok.habedieeh.re', 'https://proxitok.privacydev.net', 'https://tok.artemislena.eu', 'https://cringe.whatever.social', 'https://proxitok.lunar.icu', 'https://cringe.seitan-ayoub.lol', 'https://proxitok.r4fo.com', 'https://proxitok.belloworld.it', 'https://proxitok.smnz.de', 'https://proxitok.esmailelbob.xyz'] }
     },
     rules: [{ source: '^https?://(www\\.|vm\\.)?tiktok\\.com/(.*)', path: '/$2', dnrRules: [
       { source: '^https?://tiktok\\.com/(.*)', path: '/$1' },
@@ -993,7 +1001,7 @@ function scheduleFarsideFallbackTimer(tabId, url, state, delay = FARSIDE_LOAD_FA
         const tab = await callApi(api.tabs, 'get', tabId)
         if (tab?.url !== url) return
       }
-      await callApi(api.tabs, 'update', tabId, { url: target })
+      await apiTabsUpdate(tabId, { url: target })
     } catch {}
   }, delay)
   pendingFarsideFallbacks.set(tabId, timer)
@@ -1308,7 +1316,7 @@ async function finishAppProtocolRedirect(tabId, previousUrl) {
   await new Promise(resolve => setTimeout(resolve, 900))
   const restoreUrl = safeHttpUrl(previousUrl)
   if (restoreUrl) {
-    try { await callApi(api.tabs, 'update', tabId, { url: restoreUrl }); return } catch {}
+    try { await apiTabsUpdate(tabId, { url: restoreUrl }); return } catch {}
   }
   try { if (api.tabs?.remove) await callApi(api.tabs, 'remove', tabId) } catch {}
 }
@@ -1318,7 +1326,7 @@ function isAppProtocolRedirect(url) {
 }
 
 async function openRedirectInTab(tabId, redirected, previousUrl = null) {
-  await callApi(api.tabs, 'update', tabId, { url: redirected })
+  await apiTabsUpdate(tabId, { url: redirected })
   if (isAppProtocolRedirect(redirected)) finishAppProtocolRedirect(tabId, previousUrl)
 }
 
@@ -1373,7 +1381,7 @@ async function allowOriginalUrl(tabId, url) {
 
 async function openOriginalInTab(tabId, original) {
   const allowed = await allowOriginalUrl(tabId, original)
-  if (allowed) await callApi(api.tabs, 'update', tabId, { url: allowed })
+  if (allowed) await apiTabsUpdate(tabId, { url: allowed })
   return allowed
 }
 

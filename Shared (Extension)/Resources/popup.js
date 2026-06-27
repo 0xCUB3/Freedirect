@@ -79,6 +79,7 @@ function render(payload, diagnosis, farside) {
     setPrimary(null, '')
   }
 
+  $('status').textContent = state.globalEnabled ? t('popupReady') : t('popupPaused')
   $('status').className = state.globalEnabled ? 'status ok' : 'status'
 }
 
