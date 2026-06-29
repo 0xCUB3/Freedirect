@@ -974,11 +974,34 @@ function farsideFallbackRedirect(urlString, state, { respectGlobal = true } = {}
   return null
 }
 
+function farsideRedirectForInstanceUrl(url, state) {
+  if (url.origin === farsideBaseUrl(state)) return null
+  for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
+    const config = state.services[serviceId]
+    if (!config?.enabled) continue
+    const frontends = serviceFrontends(service, config)
+    for (const [frontendId, frontend] of Object.entries(frontends)) {
+      if (!farsideServiceForFrontend(frontendId)) continue
+      const instances = [...(config.favoriteInstances ?? []), ...(config.customInstances ?? []), ...(frontend.instances ?? [])]
+      for (const instance of instances) {
+        let instanceUrl
+        try { instanceUrl = new URL(instance) } catch { continue }
+        if (url.hostname !== instanceUrl.hostname) continue
+        const farsidePath = farsidePathForFrontend(frontendId, `${url.pathname}${url.search}${url.hash}`)
+        if (farsidePath) return `${farsideBaseUrl(state)}${farsidePath}`
+      }
+    }
+  }
+  return null
+}
+
 function farsideRedirectForUrl(urlString, state, { respectGlobal = false } = {}) {
   let url
   try { url = new URL(urlString) } catch { return null }
   const fallback = farsideFallbackRedirect(url.href, state, { respectGlobal })
   if (fallback) return fallback
+  const instanceRedirect = farsideRedirectForInstanceUrl(url, state)
+  if (instanceRedirect) return instanceRedirect
   for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
     const config = state.services[serviceId]
     if (!config?.enabled) continue

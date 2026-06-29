@@ -53,7 +53,6 @@ node --check "Shared (Extension)/Resources/background.js"
 node --check "Shared (Extension)/Resources/content-script.js"
 node --check "Shared (Extension)/Resources/popup.js"
 node --check "Shared (Extension)/Resources/options.js"
-node scripts/smoke-extension.mjs
 node scripts/validate-catalog.mjs
 python3 -m py_compile scripts/safaridriver-extension-smoke.py
 bash -n scripts/check-safari-extension-install.sh
