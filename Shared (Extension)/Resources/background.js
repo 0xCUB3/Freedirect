@@ -1391,26 +1391,75 @@ async function redirectCurrent() {
 async function allowOriginalUrl(tabId, url) {
   const original = safeHttpUrl(url)
   if (!original) return null
-  const existing = await callApi(api.declarativeNetRequest, 'getSessionRules')
-  const id = SESSION_RULE_ID_BASE + Math.max(1, Number(tabId || 1))
-  const removeRuleIds = existing.filter(rule => rule.id === id).map(rule => rule.id)
-  const rule = {
-    id,
-    priority: 100,
-    action: { type: 'allow' },
-    condition: { regexFilter: bypassRegexForUrl(original), resourceTypes: ['main_frame'] }
-  }
-  await callApi(api.declarativeNetRequest, 'updateSessionRules', { removeRuleIds, addRules: [rule] })
+  // Mark the URL as bypassed in persisted state first, regardless of whether
+  // the DNR allow rule can be installed. The content-script fallback checks
+  // this list to avoid re-redirecting the original back to the frontend.
   const state = await getState()
   state.diagnostics.bypassedUrls = [original, ...(state.diagnostics.bypassedUrls ?? []).filter(value => value !== original)].slice(0, 20)
   await saveState(state)
+  try {
+    const existing = await callApi(api.declarativeNetRequest, 'getSessionRules')
+    const id = SESSION_RULE_ID_BASE + Math.max(1, Number(tabId || 1))
+    const removeRuleIds = existing.filter(rule => rule.id === id).map(rule => rule.id)
+    const rule = {
+      id,
+      priority: 100,
+      action: { type: 'allow' },
+      condition: { regexFilter: bypassRegexForUrl(original), resourceTypes: ['main_frame'] }
+    }
+    await callApi(api.declarativeNetRequest, 'updateSessionRules', { removeRuleIds, addRules: [rule] })
+  } catch {}
   return original
 }
 
+const liftedRuleRestore = new Map()
+
+async function liftRedirectRulesForUrl(originalUrl) {
+  const dnr = api.declarativeNetRequest
+  if (!dnr?.getDynamicRules || !dnr?.updateDynamicRules) return () => {}
+  let lifted = []
+  try {
+    const existing = await callApi(dnr, 'getDynamicRules')
+    lifted = existing.filter(rule => {
+      if (rule.action?.type !== 'redirect') return false
+      try { return new RegExp(rule.condition?.regexFilter || '').test(originalUrl) } catch { return false }
+    })
+    if (lifted.length) await callApi(dnr, 'updateDynamicRules', { removeRuleIds: lifted.map(rule => rule.id), addRules: [] })
+  } catch {}
+  let restored = false
+  return async () => {
+    if (restored || !lifted.length) return
+    restored = true
+    try { await callApi(dnr, 'updateDynamicRules', { removeRuleIds: [], addRules: lifted }) } catch {}
+  }
+}
+
+function restoreLiftedRulesForTab(tabId) {
+  if (tabId === undefined) return
+  const entry = liftedRuleRestore.get(tabId)
+  if (!entry) return
+  clearTimeout(entry.timer)
+  liftedRuleRestore.delete(tabId)
+  entry.restore()
+}
+
 async function openOriginalInTab(tabId, original) {
-  const allowed = await allowOriginalUrl(tabId, original)
-  if (allowed) await apiTabsUpdate(tabId, { url: allowed })
-  return allowed
+  // Install an allow rule so the original can load (works when the browser
+  // honors allow-over-redirect precedence). Best-effort: a failure here must
+  // not block the navigation below.
+  const allowed = await allowOriginalUrl(tabId, original).catch(() => null)
+  const target = allowed || original
+  // Safari does not reliably let an `allow` session rule override a dynamic
+  // `redirect` rule for the same request, so the tab can be bounced back to
+  // the frontend it was already on. Temporarily lift the matching redirect
+  // rules for this navigation and restore them once it commits.
+  const restore = await liftRedirectRulesForUrl(target)
+  try { await apiTabsUpdate(tabId, { url: target }) }
+  finally {
+    const timer = setTimeout(() => restoreLiftedRulesForTab(tabId), 2000)
+    liftedRuleRestore.set(tabId, { restore, timer })
+  }
+  return target
 }
 
 async function openOriginalInNewTab(original) {
@@ -1588,12 +1637,16 @@ api.webNavigation?.onBeforeNavigate?.addListener(async details => {
   } catch {}
 })
 api.webNavigation?.onCompleted?.addListener(details => {
-  if (details.frameId === 0 && details.tabId !== undefined) clearFarsideFallbackTimer(details.tabId)
+  if (details.frameId === 0 && details.tabId !== undefined) {
+    clearFarsideFallbackTimer(details.tabId)
+    restoreLiftedRulesForTab(details.tabId)
+  }
 })
 api.webNavigation?.onErrorOccurred?.addListener(async details => {
   if (details.frameId !== 0 || details.tabId === undefined || !/^https?:/.test(details.url || '')) return
   const error = String(details.error || '').toLowerCase()
   clearFarsideFallbackTimer(details.tabId)
+  restoreLiftedRulesForTab(details.tabId)
   if (/cancel|abort|interrupted|blocked/.test(error)) return
   try {
     const state = await getState()

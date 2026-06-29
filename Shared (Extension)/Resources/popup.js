@@ -83,6 +83,11 @@ function render(payload, diagnosis, farside) {
   $('status').className = state.globalEnabled ? 'status ok' : 'status'
 }
 
+function renderError(error) {
+  $('status').textContent = t('popupError', [error?.message || String(error)])
+  $('status').className = 'status'
+}
+
 async function refresh() {
   try {
     const [state, current, farside] = await Promise.all([msg('getState'), msg('diagnoseCurrent'), msg('farsideCurrent')])
@@ -97,8 +102,8 @@ async function refresh() {
 
 $('enabled').addEventListener('change', event => msg('setGlobalEnabled', { enabled: event.target.checked }).then(refresh))
 $('primaryAction').addEventListener('click', () => {
-  if (primaryAction === 'redirect') return msg('redirectCurrent').then(refresh)
-  if (primaryAction === 'reverse') return msg('reverseCurrent').then(refresh)
+  if (primaryAction === 'redirect') return msg('redirectCurrent').then(refresh).catch(error => renderError(error))
+  if (primaryAction === 'reverse') return msg('reverseCurrent').then(refresh).catch(error => renderError(error))
 })
 $('farsideAction').addEventListener('click', () => msg('openFarsideCurrent').then(refresh))
 async function openSettings() {
