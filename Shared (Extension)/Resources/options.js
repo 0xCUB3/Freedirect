@@ -423,4 +423,49 @@ const api = globalThis.chrome ?? globalThis.browser
     try { await msg('importState', { state: JSON.parse($('backup').value) }); await refresh() }
     catch (error) { alert(`Import failed: ${error.message || error}`) }
   })
+
+  function formatSyncStatus(status) {
+    if (!status) return t('syncStatusDefault')
+    if (!status.available) return t('syncUnavailable')
+    if (!status.syncEnabled) return t('syncDisabled')
+    const parts = []
+    if (status.lastSyncAt) {
+      const when = new Date(status.lastSyncAt)
+      parts.push(`Last synced ${when.toLocaleString()}`)
+    }
+    if (status.cloudUpdatedAt) parts.push(`Cloud updated ${new Date(status.cloudUpdatedAt).toLocaleString()}`)
+    else parts.push('Cloud copy empty.')
+    if (status.localDirtyAt) parts.push('Pending upload.')
+    if (status.lastSyncError) parts.push(`Error: ${status.lastSyncError}`)
+    return parts.join(' · ') || t('syncStatusDefault')
+  }
+
+  async function refreshSync() {
+    let status
+    try { status = await msg('syncStatus') }
+    catch (error) { status = { available: false, syncEnabled: false, lastSyncError: error?.message } }
+    const enabled = Boolean(status?.syncEnabled)
+    $('syncEnabled').checked = enabled
+    $('syncStatus').textContent = formatSyncStatus(status)
+    $('syncRemoveCloud').disabled = !enabled
+    $('syncRefresh').disabled = !enabled
+    const note = status?.available === false ? t('syncUnavailable') : ''
+    const noteEl = $('syncNote')
+    if (note) { noteEl.textContent = note; noteEl.hidden = false } else { noteEl.hidden = true }
+  }
+
+  $('syncEnabled').addEventListener('change', async event => {
+    await msg('syncSetEnabled', { enabled: event.target.checked })
+    await refreshSync()
+  })
+  $('syncRefresh').addEventListener('click', async () => {
+    await msg('syncRefresh')
+    await refreshSync()
+  })
+  $('syncRemoveCloud').addEventListener('click', async () => {
+    if (!confirm('Remove Freedirect settings from iCloud? Your local settings on this device stay intact.')) return
+    await msg('syncRemoveCloud')
+    await refreshSync()
+  })
+  refreshSync()
   refresh()

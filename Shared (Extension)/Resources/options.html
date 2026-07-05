@@ -192,6 +192,20 @@
       <textarea id="backup" spellcheck="false" data-i18n-aria-label="backupState" aria-label="Backup JSON" data-i18n-placeholder="backupPlaceholder" placeholder="Exported JSON appears here. Paste JSON and press Import to restore."></textarea>
     </div>
   </details>
+
+  <details>
+    <summary data-i18n="sync">Sync across devices</summary>
+    <div class="details-grid">
+      <p class="muted" data-i18n="syncHint">Mirror your settings to iCloud so the same setup is used on every device where Freedirect is installed.</p>
+      <label class="switch"><input id="syncEnabled" type="checkbox"> <span data-i18n="syncEnabled">Sync settings across devices (iCloud)</span></label>
+      <p id="syncStatus" class="muted" aria-live="polite" data-i18n="syncStatusDefault">Loading sync status…</p>
+      <div class="details-row">
+        <button id="syncRefresh" type="button" data-i18n="syncRefresh">Sync now</button>
+        <button id="syncRemoveCloud" type="button" class="danger" data-i18n="syncRemoveCloud">Remove cloud copy</button>
+      </div>
+      <p id="syncNote" class="muted" hidden></p>
+    </div>
+  </details>
 </main>
 <script src="options.js"></script>
 </body>

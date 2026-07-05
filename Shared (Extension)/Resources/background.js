@@ -56,6 +56,13 @@ const TOOLBAR_ICONS = {
 }
 let bundledInstancesLoaded = false
 let publicInstanceRefreshStarted = false
+
+// iCloud sync state. See ICLOUD_SYNC.md.
+const SYNC_PUSH_DEBOUNCE_MS = 600
+const SYNC_POLL_INTERVAL_MIN = 5
+let syncPushTimer = null
+let suppressLocalDirty = false
+let syncMetaCache = null
 let stateWriteQueue = Promise.resolve()
 let ruleRebuildQueue = Promise.resolve()
 const tabLastGoodUrls = new Map()
@@ -626,6 +633,7 @@ async function getState() {
 
 async function saveState(state) {
   await storageSet({ freedirectState: state })
+  await markLocalDirty()
 }
 
 function withStateWrite(mutator) {
@@ -637,6 +645,155 @@ function withStateWrite(mutator) {
   })
   stateWriteQueue = run.then(() => null, () => null)
   return run
+}
+
+// --- iCloud sync (see ICLOUD_SYNC.md) ---
+// Mirrors freedirectState to NSUbiquitousKeyValueStore via the native
+// messaging host in SafariWebExtensionHandler. The local store stays the
+// source of truth; cloud is a last-write-wins overlay keyed by updatedAt.
+function defaultSyncMeta() {
+  return { syncEnabled: true, localDirtyAt: null, cloudUpdatedAt: null, cloudOrigin: null, lastSyncAt: null, lastSyncError: null, deviceId: '' }
+}
+
+async function getSyncMeta() {
+  if (syncMetaCache) return syncMetaCache
+  const stored = await storageGet(['freedirectSyncMeta'])
+  const meta = (stored.freedirectSyncMeta && typeof stored.freedirectSyncMeta === 'object' && !Array.isArray(stored.freedirectSyncMeta))
+    ? { ...defaultSyncMeta(), ...stored.freedirectSyncMeta }
+    : defaultSyncMeta()
+  if (!meta.deviceId) {
+    meta.deviceId = (globalThis.crypto?.randomUUID?.() || `d-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`)
+    await saveSyncMeta(meta)
+  }
+  syncMetaCache = meta
+  return meta
+}
+
+async function saveSyncMeta(meta) {
+  syncMetaCache = meta
+  await storageSet({ freedirectSyncMeta: meta })
+}
+
+function scheduleSyncPush() {
+  if (syncPushTimer) return
+  syncPushTimer = setTimeout(() => {
+    syncPushTimer = null
+    syncPush().catch(() => {})
+  }, SYNC_PUSH_DEBOUNCE_MS)
+}
+
+async function markLocalDirty() {
+  if (suppressLocalDirty) return
+  const meta = await getSyncMeta()
+  if (!meta.syncEnabled) return
+  await saveSyncMeta({ ...meta, localDirtyAt: new Date().toISOString() })
+  scheduleSyncPush()
+}
+
+async function syncPush({ force = false } = {}) {
+  const meta = await getSyncMeta()
+  if (!meta.syncEnabled) return { ok: false, reason: 'disabled' }
+  if (!force && !meta.localDirtyAt) return { ok: true, reason: 'up-to-date' }
+  const state = await getState()
+  const updatedAt = meta.localDirtyAt || new Date().toISOString()
+  const envelope = { format: 'freedirect-state', schemaVersion: state.schemaVersion, updatedAt, originDevice: meta.deviceId, state }
+  const res = await sendNativeMessage({ type: 'syncPut', payload: envelope, updatedAt })
+  if (res?.available === false) {
+    await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: res?.reason || 'iCloud unavailable' })
+    return { ok: false, reason: 'unavailable' }
+  }
+  if (!res?.ok) {
+    const error = res?.error || res?.reason || 'syncPut failed'
+    await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: error })
+    scheduleSyncPush()
+    return { ok: false, reason: error }
+  }
+  await saveSyncMeta({ ...meta, localDirtyAt: null, cloudUpdatedAt: res.cloudUpdatedAt || updatedAt, cloudOrigin: meta.deviceId, lastSyncAt: new Date().toISOString(), lastSyncError: null })
+  return { ok: true, cloudUpdatedAt: res.cloudUpdatedAt || updatedAt }
+}
+
+async function syncPull({ manual = false } = {}) {
+  const meta = await getSyncMeta()
+  if (!meta.syncEnabled && !manual) return { ok: false, reason: 'disabled' }
+  const res = await sendNativeMessage({ type: 'syncGet' })
+  if (!res?.ok) {
+    await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: res?.reason || res?.error || 'syncGet failed' })
+    return { ok: false, reason: 'syncGet failed' }
+  }
+  if (res.available === false) {
+    await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: 'iCloud unavailable' })
+    return { ok: false, reason: 'unavailable' }
+  }
+  const cloudUpdatedAt = res.cloudUpdatedAt || null
+  const cloudOrigin = res.cloudOrigin || null
+  const payload = res.payload
+  const emptyCloud = !cloudUpdatedAt || payload == null
+  if (emptyCloud) {
+    if (meta.localDirtyAt) {
+      await saveSyncMeta({ ...meta, cloudUpdatedAt: null, cloudOrigin: null })
+      return await syncPush()
+    }
+    await saveSyncMeta({ ...meta, cloudUpdatedAt: null, cloudOrigin: null, lastSyncAt: new Date().toISOString(), lastSyncError: null })
+    return { ok: true, reason: 'empty-cloud' }
+  }
+  if (meta.cloudUpdatedAt === cloudUpdatedAt) {
+    if (meta.localDirtyAt) return await syncPush()
+    await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: null })
+    return { ok: true, reason: 'unchanged' }
+  }
+  const localTime = meta.localDirtyAt ? Date.parse(meta.localDirtyAt) : 0
+  const cloudTime = Date.parse(cloudUpdatedAt)
+  if (meta.localDirtyAt && localTime > cloudTime) {
+    return await syncPush()
+  }
+  if (!payload || typeof payload !== 'object' || !payload.state) {
+    await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: 'invalid cloud payload' })
+    return { ok: false, reason: 'invalid cloud payload' }
+  }
+  suppressLocalDirty = true
+  try {
+    const imported = migrateState(payload.state)
+    await storageSet({ freedirectState: imported })
+    await rebuildRules()
+  } finally {
+    suppressLocalDirty = false
+  }
+  await saveSyncMeta({ ...meta, localDirtyAt: null, cloudUpdatedAt, cloudOrigin, lastSyncAt: new Date().toISOString(), lastSyncError: null })
+  return { ok: true, reason: 'imported' }
+}
+
+async function getSyncStatus() {
+  const meta = await getSyncMeta()
+  const status = await sendNativeMessage({ type: 'syncStatus' })
+  const available = Boolean(status?.available)
+  return {
+    syncEnabled: meta.syncEnabled,
+    localDirtyAt: meta.localDirtyAt,
+    cloudUpdatedAt: meta.cloudUpdatedAt,
+    cloudOrigin: meta.cloudOrigin,
+    lastSyncAt: meta.lastSyncAt,
+    lastSyncError: meta.lastSyncError,
+    deviceId: meta.deviceId,
+    available
+  }
+}
+
+async function setSyncEnabled(enabled) {
+  const meta = await getSyncMeta()
+  const syncEnabled = Boolean(enabled)
+  await saveSyncMeta({ ...meta, syncEnabled })
+  if (syncEnabled) {
+    scheduleSyncPush()
+    return await syncPull({ manual: true })
+  }
+  return { ok: true, syncEnabled: false }
+}
+
+async function removeSyncCloud() {
+  const res = await sendNativeMessage({ type: 'syncRemove' })
+  const meta = await getSyncMeta()
+  await saveSyncMeta({ ...meta, cloudUpdatedAt: null, cloudOrigin: null, localDirtyAt: null, lastSyncAt: new Date().toISOString(), lastSyncError: null })
+  return { ok: Boolean(res?.ok), removed: Boolean(res?.removed), available: Boolean(res?.available) }
 }
 
 function mergePublicInstanceData(data) {
@@ -1613,10 +1770,30 @@ async function ensureInitialized({ rebuildIfMissing = false } = {}) {
 api.runtime.onInstalled.addListener(async () => {
   await ensureInitialized()
   await rebuildRules()
+  await startSync()
 })
 
 api.runtime.onStartup?.addListener(async () => {
   await ensureInitialized({ rebuildIfMissing: true })
+  await startSync()
+})
+
+async function startSync() {
+  // Pull any cloud changes that landed while the background was suspended.
+  syncPull().catch(() => {})
+  if (api.alarms?.create) {
+    try { api.alarms.create('freedirect.sync', { periodInMinutes: SYNC_POLL_INTERVAL_MIN }) } catch {}
+  }
+}
+
+api.alarms?.onAlarm?.addListener(alarm => {
+  if (alarm?.name === 'freedirect.sync') syncPull().catch(() => {})
+})
+
+api.storage?.onChanged?.addListener((changes, area) => {
+  // Cross-window change: if another context updated freedirectSyncMeta
+  // (e.g. options page toggled sync), refresh our cache lazily.
+  if (area === 'local' && changes?.freedirectSyncMeta) syncMetaCache = null
 })
 
 api.tabs?.onActivated?.addListener(() => { updateCurrentActionIcon() })
@@ -1905,6 +2082,14 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return await sendNativeMessage({ type: 'ping', at: new Date().toISOString() })
       case 'nativeCapabilities':
         return await sendNativeMessage({ type: 'capabilities', at: new Date().toISOString() })
+      case 'syncStatus':
+        return await getSyncStatus()
+      case 'syncSetEnabled':
+        return await setSyncEnabled(message.enabled)
+      case 'syncRemoveCloud':
+        return await removeSyncCloud()
+      case 'syncRefresh':
+        return await syncPull({ manual: true })
       default:
         return { error: 'Unknown message type' }
     }
