@@ -6,5 +6,7 @@
 	<string>public.app-category.utilities</string>
 	<key>SFSafariWebExtensionConverterVersion</key>
 	<string>27.0</string>
+	<key>SFSafariCorrespondingIOSAppBundleIdentifier</key>
+	<string>app.freedirect.Freedirect</string>
 </dict>
 </plist>

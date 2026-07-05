@@ -125,6 +125,8 @@
 		862606E22FE80EDC005BA1FC /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		862606E32FE80EDC005BA1FC /* Freedirect.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Freedirect.entitlements; sourceTree = "<group>"; };
 		862606E42FE80EDC005BA1FC /* Freedirect Extension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Freedirect Extension.entitlements"; sourceTree = "<group>"; };
+		862606F12FE80EDC005BA1FC /* Freedirect.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Freedirect.entitlements; sourceTree = "<group>"; };
+		862606F22FE80EDC005BA1FC /* Freedirect Extension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Freedirect Extension.entitlements"; sourceTree = "<group>"; };
 		862606E72FE80EDC005BA1FC /* content-script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "content-script.js"; path = "Resources/content-script.js"; sourceTree = "<group>"; };
 		862606EA2FE80EDC005BA1FC /* popup.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = popup.js; path = Resources/popup.js; sourceTree = "<group>"; };
 		862606EB2FE80EDC005BA1FC /* options.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = options.js; path = Resources/options.js; sourceTree = "<group>"; };
@@ -218,6 +220,7 @@
 				862606822FE80EDB005BA1FC /* LaunchScreen.storyboard */,
 				862606852FE80EDB005BA1FC /* Main.storyboard */,
 				862606882FE80EDB005BA1FC /* Info.plist */,
+				862606F12FE80EDC005BA1FC /* Freedirect.entitlements */,
 			);
 			path = "iOS (App)";
 			sourceTree = "<group>";
@@ -237,6 +240,7 @@
 			isa = PBXGroup;
 			children = (
 				8626069E2FE80EDB005BA1FC /* Info.plist */,
+				862606F22FE80EDC005BA1FC /* Freedirect Extension.entitlements */,
 			);
 			path = "iOS (Extension)";
 			sourceTree = "<group>";
@@ -642,6 +646,7 @@
 		862606BA2FE80EDB005BA1FC /* Debug configuration for PBXNativeTarget "Freedirect Extension (iOS)" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "iOS (Extension)/Freedirect Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DNP7DGUB7B;
@@ -676,6 +681,7 @@
 		862606BB2FE80EDB005BA1FC /* Release configuration for PBXNativeTarget "Freedirect Extension (iOS)" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "iOS (Extension)/Freedirect Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DNP7DGUB7B;
@@ -713,6 +719,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "iOS (App)/Freedirect.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DNP7DGUB7B;
@@ -754,6 +761,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "iOS (App)/Freedirect.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DNP7DGUB7B;
