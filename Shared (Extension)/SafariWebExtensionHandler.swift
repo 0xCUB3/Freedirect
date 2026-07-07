@@ -116,7 +116,7 @@ final class SyncStore {
     }
 
     func read() -> [String: Any] {
-        guard hasEntitlement else {
+        guard isAvailable else {
             return ["ok": true, "available": false, "payload": NSNull(), "cloudUpdatedAt": NSNull(), "cloudOrigin": NSNull()]
         }
         let payloadData = store.data(forKey: payloadKey)
@@ -138,7 +138,7 @@ final class SyncStore {
     }
 
     func write(envelope: [String: Any]?, updatedAt: String?) -> [String: Any] {
-        guard hasEntitlement else {
+        guard isAvailable else {
             return ["ok": true, "available": false, "written": false]
         }
         guard let envelope = envelope else {
@@ -163,7 +163,7 @@ final class SyncStore {
     }
 
     func remove() -> [String: Any] {
-        guard hasEntitlement else {
+        guard isAvailable else {
             return ["ok": true, "available": false, "removed": false]
         }
         store.removeObject(forKey: payloadKey)
@@ -176,20 +176,21 @@ final class SyncStore {
     func status() -> [String: Any] {
         return [
             "ok": true,
-            "available": hasEntitlement,
+            "available": isAvailable,
             "cloudUpdatedAt": store.string(forKey: updatedAtKey) ?? NSNull(),
             "cloudOrigin": store.string(forKey: originKey) ?? NSNull()
         ]
     }
 
-    /// Detect whether the appex actually carries the iCloud KV store entitlement.
-    /// Sandboxed apps/extensions return the unmodified entitlements dictionary via
-    /// `Bundle.main.object(forInfoDictionaryKey:)`; absence means local-only mode.
-    private var hasEntitlement: Bool {
-        guard let entitlements = Bundle.main.object(forInfoDictionaryKey: "com.apple.developer.ubiquity-kvstore-identifier") as? String,
-              !entitlements.isEmpty else {
-            return false
-        }
-        return true
+    /// Whether the iCloud KV store is actually reachable: a non-nil
+    /// `ubiquityIdentityToken` means an iCloud account is signed in and the
+    /// appex carries the `com.apple.developer.ubiquity-kvstore-identifier`
+    /// entitlement. The OS enforces the entitlement at the framework level
+    /// (writes succeed locally under a signed-out account but don't propagate),
+    /// so there's no separate entitlement probe here. `Bundle.main`
+    /// Info.plist lookups do not reach code-signed entitlements and would
+    /// report `false` unconditionally.
+    private var isAvailable: Bool {
+        FileManager.default.ubiquityIdentityToken != nil
     }
 }
