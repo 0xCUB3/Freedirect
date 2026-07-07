@@ -966,6 +966,7 @@ async function rebuildRulesNow() {
   const metadataById = new Map(records.map(record => [record.rule.id, record]))
   const rejectedRules = validation.rejected.map(rejected => ({ id: rejected.id, reason: rejected.reason || 'unsupported regex' }))
   const isSafari = PROMISE_STYLE_API
+  const diagnostics = { lastGeneratedAt: new Date().toISOString(), lastRuleCount: 0, lastRejectedRules: [], lastError: null }
   if (!isSafari) {
     try {
       await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds, addRules })
