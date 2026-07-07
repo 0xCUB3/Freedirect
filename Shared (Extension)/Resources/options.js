@@ -426,7 +426,7 @@ const api = globalThis.chrome ?? globalThis.browser
 
   function formatSyncStatus(status) {
     if (!status) return t('syncStatusDefault')
-    if (!status.available) return t('syncStatusDefault')
+    if (!status.available) return ''
     if (!status.syncEnabled) return t('syncDisabled')
     const parts = []
     if (status.lastSyncAt) {

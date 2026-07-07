@@ -91,10 +91,20 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 /// cross-device propagation tied to the user's iCloud account. The appex talks
 /// to it directly — no container-app round trip — because extensions can use
 /// the KV store as long as the `com.apple.developer.ubiquity-kvstore-identifier`
-/// entitlement is present on the appex target. When iCloud is unavailable
-/// (no account, no entitlement, quota exceeded) the store still works locally
-/// but stops propagating; that surfaces as `available: false` to the JS layer,
-/// which then skips pushes but keeps local state intact.
+/// entitlement is present on the appex target.
+///
+/// No availability gate is probed here. Earlier versions checked
+/// `FileManager.default.ubiquityIdentityToken`, but that token is non-nil
+/// only when iCloud *Drive* is enabled for the app, not just Key-Value
+/// Storage. iOS app extensions routinely see a nil token even when the KV
+/// store works, producing false "iCloud unavailable" reports. The store
+/// itself silently handles the no-account / no-propagation case: writes
+/// succeed locally but don't propagate to other devices. We always report
+/// `available: true` and let the JS layer observe propagation via
+/// `cloudUpdatedAt` movement (or the lack of it). If the entitlement isn't
+/// signed into the binary, the framework rejects writes at call time and
+/// `write` returns `ok: false` with the OS error, which is surfaced as
+/// `lastSyncError` for the user to act on.
 final class SyncStore {
     static let shared = SyncStore()
 
@@ -116,9 +126,6 @@ final class SyncStore {
     }
 
     func read() -> [String: Any] {
-        guard isAvailable else {
-            return ["ok": true, "available": false, "payload": NSNull(), "cloudUpdatedAt": NSNull(), "cloudOrigin": NSNull()]
-        }
         let payloadData = store.data(forKey: payloadKey)
         let updatedAt = store.string(forKey: updatedAtKey)
         let origin = store.string(forKey: originKey)
@@ -138,9 +145,6 @@ final class SyncStore {
     }
 
     func write(envelope: [String: Any]?, updatedAt: String?) -> [String: Any] {
-        guard isAvailable else {
-            return ["ok": true, "available": false, "written": false]
-        }
         guard let envelope = envelope else {
             return ["ok": false, "error": "Missing payload"]
         }
@@ -163,9 +167,6 @@ final class SyncStore {
     }
 
     func remove() -> [String: Any] {
-        guard isAvailable else {
-            return ["ok": true, "available": false, "removed": false]
-        }
         store.removeObject(forKey: payloadKey)
         store.removeObject(forKey: updatedAtKey)
         store.removeObject(forKey: originKey)
@@ -176,21 +177,9 @@ final class SyncStore {
     func status() -> [String: Any] {
         return [
             "ok": true,
-            "available": isAvailable,
+            "available": true,
             "cloudUpdatedAt": store.string(forKey: updatedAtKey) ?? NSNull(),
             "cloudOrigin": store.string(forKey: originKey) ?? NSNull()
         ]
-    }
-
-    /// Whether the iCloud KV store is actually reachable: a non-nil
-    /// `ubiquityIdentityToken` means an iCloud account is signed in and the
-    /// appex carries the `com.apple.developer.ubiquity-kvstore-identifier`
-    /// entitlement. The OS enforces the entitlement at the framework level
-    /// (writes succeed locally under a signed-out account but don't propagate),
-    /// so there's no separate entitlement probe here. `Bundle.main`
-    /// Info.plist lookups do not reach code-signed entitlements and would
-    /// report `false` unconditionally.
-    private var isAvailable: Bool {
-        FileManager.default.ubiquityIdentityToken != nil
     }
 }
