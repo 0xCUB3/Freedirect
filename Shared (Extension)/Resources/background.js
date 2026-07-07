@@ -1073,22 +1073,36 @@ async function rebuildRulesNow() {
     //
     // 1. Stale rules from previous (buggy) builds can persist in the rule
     //    store but NOT appear in getDynamicRules (Safari can't enumerate
-    //    unparseable rules). We blanket-clear rule IDs in our allocation range
-    //    (1000-5999) to evict them.
+    //    unparseable rules). We include rule IDs in our allocation range
+    //    (1000-5999) in the removal set to evict them.
     //
     // 2. updateDynamicRules fails transiently during appex reloads (Debug
     //    reinstalls, extension toggles) with "Unable to parse" even when the
-    //    rules are valid. We retry the clear+install with backoff to ride
-    //    through the reload window.
+    //    rules are valid. We retry with backoff to ride through the reload
+    //    window.
+    //
+    // CRITICAL: install new rules BEFORE clearing old ones. The previous
+    // clear-then-install pattern left a multi-hundred-ms window during
+    // which ZERO rules were in effect — navigations that arrived in that
+    // window saw no DNR match, the original page started loading, and the
+    // content-script fallback had to fire location.replace after the fact.
+    // Installing first guarantees at every moment either the old rules or
+    // the new rules are live, never neither.
+    // Stale-rule sweep covers our allocation range (1000-5999) to evict
+    // rules from previous builds that Safari can't enumerate via
+    // getDynamicRules (unparseable rules are invisible). But we MUST
+    // exclude IDs we're about to install in Phase 1 — otherwise Phase 2's
+    // clear would wipe the rules we just put in. Conflicting stale rules
+    // get cleanly replaced by Phase 1's install (DNR IDs are unique; an
+    // add with an existing ID overwrites the previous rule at that ID).
+    const newIds = new Set(addRules.map(rule => rule.id))
     const staleRuleIds = []
-    for (let id = 1000; id <= 5999; id++) staleRuleIds.push(id)
+    for (let id = 1000; id <= 5999; id++) if (!newIds.has(id)) staleRuleIds.push(id)
     const clearAllRuleIds = Array.from(new Set([...removeRuleIds, ...staleRuleIds]))
     const installOnSafari = async () => {
-      try {
-        await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: clearAllRuleIds, addRules: [] })
-      } catch (clearError) {
-        throw clearError
-      }
+      // Phase 1: install new rules one-by-one (Safari rejects large batches).
+      // Old rules are still in effect during this phase, so there's no window
+      // where matching navigations fall through to the original page.
       diagnostics.lastError = null
       diagnostics.lastRuleCount = 0
       for (const rule of addRules) {
@@ -1098,6 +1112,15 @@ async function rebuildRulesNow() {
         } catch (ruleError) {
           rejectedRules.push({ id: rule.id, reason: String(ruleError?.message ?? ruleError) })
         }
+      }
+      // Phase 2: clear stale rules. New rules are already installed, so the
+      // brief remove-call leaves the active rule set intact.
+      try {
+        await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: clearAllRuleIds, addRules: [] })
+      } catch (clearError) {
+        // Clear failure is non-fatal: stale rules just sit unused; the new
+        // rules are already live. Surface it for diagnostics only.
+        if (!diagnostics.lastError) diagnostics.lastError = String(clearError?.message ?? clearError)
       }
     }
     const safariDelays = [0, 800, 2000]
