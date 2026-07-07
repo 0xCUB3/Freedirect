@@ -198,6 +198,14 @@
     <div class="details-grid">
       <p class="muted" data-i18n="syncHint">Mirror your settings to iCloud so the same setup is used on every device where Freedirect is installed.</p>
       <label class="switch"><input id="syncEnabled" type="checkbox"> <span data-i18n="syncEnabled">Sync settings across devices (iCloud)</span></label>
+      <div id="syncConflict" hidden>
+        <p id="syncConflictSummary" class="muted"></p>
+        <div class="details-row">
+          <label><input type="radio" name="syncResolve" value="cloud"> <span data-i18n="syncConflictCloudLabel">Use cloud settings (replaces this device)</span></label>
+          <label><input type="radio" name="syncResolve" value="local" checked> <span data-i18n="syncConflictLocalLabel">Use this device (overwrites cloud)</span></label>
+        </div>
+        <button id="syncResolveApply" type="button" data-i18n="syncConflictApply">Apply</button>
+      </div>
       <p id="syncStatus" class="muted" aria-live="polite" data-i18n="syncStatusDefault">Loading sync status…</p>
       <div class="details-row">
         <button id="syncRefresh" type="button" data-i18n="syncRefresh">Sync now</button>

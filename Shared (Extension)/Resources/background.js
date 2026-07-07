@@ -652,7 +652,7 @@ function withStateWrite(mutator) {
 // messaging host in SafariWebExtensionHandler. The local store stays the
 // source of truth; cloud is a last-write-wins overlay keyed by updatedAt.
 function defaultSyncMeta() {
-  return { syncEnabled: true, localDirtyAt: null, cloudUpdatedAt: null, cloudOrigin: null, lastSyncAt: null, lastSyncError: null, deviceId: '' }
+  return { syncEnabled: true, localDirtyAt: null, cloudUpdatedAt: null, cloudOrigin: null, lastSyncAt: null, lastSyncError: null, deviceId: '', pendingConflict: null }
 }
 
 async function getSyncMeta() {
@@ -693,6 +693,7 @@ async function markLocalDirty() {
 async function syncPush({ force = false } = {}) {
   const meta = await getSyncMeta()
   if (!meta.syncEnabled) return { ok: false, reason: 'disabled' }
+  if (meta.pendingConflict) return { ok: false, reason: 'pending conflict' }
   if (!force && !meta.localDirtyAt) return { ok: true, reason: 'up-to-date' }
   const state = await getState()
   const updatedAt = meta.localDirtyAt || new Date().toISOString()
@@ -715,6 +716,7 @@ async function syncPush({ force = false } = {}) {
 async function syncPull({ manual = false } = {}) {
   const meta = await getSyncMeta()
   if (!meta.syncEnabled && !manual) return { ok: false, reason: 'disabled' }
+  if (meta.pendingConflict) return { ok: false, reason: 'pending conflict' }
   const res = await sendNativeMessage({ type: 'syncGet' })
   if (!res?.ok) {
     await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: res?.reason || res?.error || 'syncGet failed' })
@@ -773,6 +775,7 @@ async function getSyncStatus() {
     cloudOrigin: meta.cloudOrigin,
     lastSyncAt: meta.lastSyncAt,
     lastSyncError: meta.lastSyncError,
+    pendingConflict: meta.pendingConflict,
     deviceId: meta.deviceId,
     available
   }
@@ -781,20 +784,80 @@ async function getSyncStatus() {
 async function setSyncEnabled(enabled) {
   const meta = await getSyncMeta()
   const syncEnabled = Boolean(enabled)
-  await saveSyncMeta({ ...meta, syncEnabled })
-  if (syncEnabled) {
-    scheduleSyncPush()
-    return await syncPull({ manual: true })
+  if (!syncEnabled) {
+    await saveSyncMeta({ ...meta, syncEnabled: false, pendingConflict: null })
+    return { ok: true, syncEnabled: false }
   }
-  return { ok: true, syncEnabled: false }
+  // Enabling sync. Probe the cloud for first-contact conflict: if both sides
+  // have state and this device has never synced with this particular cloud
+  // copy, don't silently pick a direction — surface it to the user via
+  // `pendingConflict` in `getSyncStatus`, which the options UI renders as an
+  // explicit choice. The periodic poll and `markLocalDirty` paths bail on
+  // pending conflict, so steady-state sync stays paused until resolved.
+  const localDirtyAt = new Date().toISOString()
+  await saveSyncMeta({ ...meta, syncEnabled: true, localDirtyAt, pendingConflict: null })
+  const res = await sendNativeMessage({ type: 'syncGet' })
+  if (!res?.ok) {
+    await saveSyncMeta({ ...meta, lastSyncError: res?.reason || res?.error || 'syncGet failed' })
+    return { ok: false, reason: 'syncGet failed' }
+  }
+  if (res.available === false) {
+    await saveSyncMeta({ ...meta, lastSyncError: 'iCloud unavailable' })
+    return { ok: false, reason: 'unavailable' }
+  }
+  const cloudUpdatedAt = res.cloudUpdatedAt || null
+  const cloudOrigin = res.cloudOrigin || null
+  const emptyCloud = !cloudUpdatedAt || res.payload == null
+  if (emptyCloud) return await syncPush({ force: true })
+  if (cloudUpdatedAt === meta.cloudUpdatedAt) return { ok: true, reason: 'unchanged' }
+  await saveSyncMeta({
+    ...meta, syncEnabled: true, localDirtyAt,
+    cloudUpdatedAt, cloudOrigin,
+    pendingConflict: { cloudUpdatedAt, cloudOrigin }
+  })
+  return { ok: true, pending: true }
+}
+
+// Resolve a pending first-contact conflict in the chosen direction. 'local'
+// pushes this device's state to the cloud; 'cloud' imports the cloud copy,
+// replacing local. Either way clears `pendingConflict` so steady-state sync
+// resumes on the next tick.
+async function syncResolve(direction) {
+  const meta = await getSyncMeta()
+  if (!meta.pendingConflict) throw new Error('No pending sync conflict')
+  await saveSyncMeta({ ...meta, pendingConflict: null })
+  if (direction === 'local') return await syncPush({ force: true })
+  if (direction === 'cloud') {
+    const res = await sendNativeMessage({ type: 'syncGet' })
+    if (!res?.ok) throw new Error(res?.error || 'syncGet failed')
+    const payload = res.payload
+    if (!payload || typeof payload !== 'object' || !payload.state) throw new Error('invalid cloud payload')
+    suppressLocalDirty = true
+    try {
+      const imported = migrateState(payload.state)
+      await storageSet({ freedirectState: imported })
+      await rebuildRules()
+    } finally {
+      suppressLocalDirty = false
+    }
+    await saveSyncMeta({
+      ...meta, pendingConflict: null, localDirtyAt: null,
+      cloudUpdatedAt: res.cloudUpdatedAt || null,
+      cloudOrigin: res.cloudOrigin || null,
+      lastSyncAt: new Date().toISOString(), lastSyncError: null
+    })
+    return { ok: true, reason: 'imported' }
+  }
+  throw new Error(`Unknown direction: ${direction}`)
 }
 
 async function removeSyncCloud() {
   const res = await sendNativeMessage({ type: 'syncRemove' })
   const meta = await getSyncMeta()
-  await saveSyncMeta({ ...meta, cloudUpdatedAt: null, cloudOrigin: null, localDirtyAt: null, lastSyncAt: new Date().toISOString(), lastSyncError: null })
+  await saveSyncMeta({ ...meta, cloudUpdatedAt: null, cloudOrigin: null, localDirtyAt: null, pendingConflict: null, lastSyncAt: new Date().toISOString(), lastSyncError: null })
   return { ok: Boolean(res?.ok), removed: Boolean(res?.removed), available: Boolean(res?.available) }
 }
+
 
 function mergePublicInstanceData(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return 0
@@ -2112,6 +2175,8 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return await removeSyncCloud()
       case 'syncRefresh':
         return await syncPull({ manual: true })
+      case 'syncResolve':
+        return await syncResolve(message.direction)
       default:
         return { error: 'Unknown message type' }
     }

@@ -14,7 +14,7 @@ const api = globalThis.chrome ?? globalThis.browser
   function messageTimeout(type) {
     if (['selectBestInstance', 'updateService'].includes(type)) return 75000
     if (['checkAllSelectedHealth', 'refreshPublicInstances', 'setAllServices'].includes(type)) return 45000
-    if (['checkInstanceHealth', 'rebuildRules', 'applyProfile', 'resetState', 'importState', 'runSanityCheck'].includes(type)) return 20000
+    if (['checkInstanceHealth', 'rebuildRules', 'applyProfile', 'resetState', 'importState', 'runSanityCheck', 'syncSetEnabled', 'syncRefresh', 'syncResolve', 'syncRemoveCloud'].includes(type)) return 20000
     return 10000
   }
   function msg(type, body = {}) {
@@ -431,7 +431,8 @@ const api = globalThis.chrome ?? globalThis.browser
     const parts = []
     if (status.lastSyncAt) {
       const when = new Date(status.lastSyncAt)
-      parts.push(`Last synced ${when.toLocaleString()}`)
+      const pushed = status.cloudOrigin && status.deviceId && status.cloudOrigin === status.deviceId
+      parts.push(`${pushed ? 'Pushed to cloud' : 'Pulled from cloud'} ${when.toLocaleString()}`)
     }
     if (status.cloudUpdatedAt) parts.push(`Cloud updated ${new Date(status.cloudUpdatedAt).toLocaleString()}`)
     else parts.push('Cloud copy empty.')
@@ -446,9 +447,20 @@ const api = globalThis.chrome ?? globalThis.browser
     catch (error) { status = { available: false, syncEnabled: false, lastSyncError: error?.message } }
     const enabled = Boolean(status?.syncEnabled)
     $('syncEnabled').checked = enabled
-    $('syncStatus').textContent = formatSyncStatus(status)
-    $('syncRemoveCloud').disabled = !enabled
-    $('syncRefresh').disabled = !enabled
+    const conflict = status?.pendingConflict
+    const conflictEl = $('syncConflict')
+    if (conflict) {
+      conflictEl.hidden = false
+      const when = conflict.cloudUpdatedAt ? new Date(conflict.cloudUpdatedAt).toLocaleString() : 'unknown time'
+      const origin = conflict.cloudOrigin ? ` from ${conflict.cloudOrigin}` : ''
+      $('syncConflictSummary').textContent = `${t('syncConflictFound')}${origin}, ${when}.`
+      $('syncStatus').textContent = ''
+    } else {
+      conflictEl.hidden = true
+      $('syncStatus').textContent = formatSyncStatus(status)
+    }
+    $('syncRemoveCloud').disabled = !enabled || Boolean(conflict)
+    $('syncRefresh').disabled = !enabled || Boolean(conflict)
     const note = status?.available === false ? t('syncUnavailable') : ''
     const noteEl = $('syncNote')
     if (note) { noteEl.textContent = note; noteEl.hidden = false } else { noteEl.hidden = true }
@@ -457,6 +469,22 @@ const api = globalThis.chrome ?? globalThis.browser
   $('syncEnabled').addEventListener('change', async event => {
     await msg('syncSetEnabled', { enabled: event.target.checked })
     await refreshSync()
+  })
+
+  $('syncResolveApply').addEventListener('click', async () => {
+    const choice = document.querySelector('input[name="syncResolve"]:checked')?.value
+    if (!choice) return
+    setBusy($('syncResolveApply'), true, 'Applying…')
+    await nextPaint()
+    try {
+      await msg('syncResolve', { direction: choice })
+      await refreshSync()
+      await refresh()
+    } catch (error) {
+      alert(error?.message || String(error))
+    } finally {
+      setBusy($('syncResolveApply'), false)
+    }
   })
   $('syncRefresh').addEventListener('click', async () => {
     await msg('syncRefresh')
