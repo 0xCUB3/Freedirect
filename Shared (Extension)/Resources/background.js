@@ -937,7 +937,15 @@ function selectedInstance(serviceId, state) {
   const frontendId = config.frontend in frontends ? config.frontend : service.defaultFrontend
   const frontend = frontends[frontendId]
   const candidates = [...(config.favoriteInstances ?? []), ...(config.customInstances ?? []), ...frontend.instances]
-  return candidates.includes(config.instance) ? config.instance : candidates[0]
+  // Honor the user's explicitly selected instance if it normalizes to a valid
+  // HTTPS origin. The `candidates` membership check below is for the dropdown
+  // UI (to mark unavailable instances), NOT for the redirect target — a
+  // public-instance refresh can rewrite `frontend.instances` and drop a
+  // built-in the user picked, which would silently fall back to
+  // `candidates[0]` (often `redlib.net`) and clobber their choice.
+  const chosen = normalizeConfiguredInstance(serviceId, frontendId, config.instance)
+  if (chosen) return chosen
+  return candidates[0]
 }
 
 function templateSubstitution(instance, path, { dnr = false } = {}) {
