@@ -700,11 +700,11 @@ async function syncPush({ force = false } = {}) {
   const envelope = { format: 'freedirect-state', schemaVersion: state.schemaVersion, updatedAt, originDevice: meta.deviceId, state }
   const res = await sendNativeMessage({ type: 'syncPut', payload: envelope, updatedAt })
   if (res?.available === false) {
-    await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: res?.reason || 'iCloud unavailable' })
+    await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: sanitizeSyncError(res?.reason || 'iCloud unavailable') })
     return { ok: false, reason: 'unavailable' }
   }
   if (!res?.ok) {
-    const error = res?.error || res?.reason || 'syncPut failed'
+    const error = sanitizeSyncError(res?.error || res?.reason || 'syncPut failed')
     await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: error })
     scheduleSyncPush()
     return { ok: false, reason: error }
@@ -719,7 +719,7 @@ async function syncPull({ manual = false } = {}) {
   if (meta.pendingConflict) return { ok: false, reason: 'pending conflict' }
   const res = await sendNativeMessage({ type: 'syncGet' })
   if (!res?.ok) {
-    await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: res?.reason || res?.error || 'syncGet failed' })
+    await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: sanitizeSyncError(res?.reason || res?.error || 'syncGet failed') })
     return { ok: false, reason: 'syncGet failed' }
   }
   if (res.available === false) {
@@ -798,7 +798,7 @@ async function setSyncEnabled(enabled) {
   await saveSyncMeta({ ...meta, syncEnabled: true, localDirtyAt, pendingConflict: null })
   const res = await sendNativeMessage({ type: 'syncGet' })
   if (!res?.ok) {
-    await saveSyncMeta({ ...meta, lastSyncError: res?.reason || res?.error || 'syncGet failed' })
+    await saveSyncMeta({ ...meta, lastSyncError: sanitizeSyncError(res?.reason || res?.error || 'syncGet failed') })
     return { ok: false, reason: 'syncGet failed' }
   }
   if (res.available === false) {
@@ -1519,17 +1519,45 @@ async function activeTabPermissionState() {
   }
 }
 
-async function sendNativeMessage(message) {
-  if (!api.runtime.sendNativeMessage) return { ok: false, reason: 'native messaging unavailable' }
-  return await new Promise(resolve => {
+// Safari rejects runtime.sendNativeMessage while the appex is mid-reload
+// (e.g. after a Debug reinstall or toggling the extension) with errors like
+// "Invalid call to runtime.sendNativeMessage(). Other version in use". These
+// are transient: the appex typically recovers within a second. We retry a
+// couple of times with backoff before surfacing the failure, so a brief
+// reload window doesn't permanently mar the sync status with an ObjC pointer
+// dump.
+function isTransientNativeError(reason) {
+  if (!reason) return false
+  const s = String(reason).toLowerCase()
+  return s.includes('other version in use')
+    || s.includes('invalid call to runtime.sendnativemessage')
+    || s.includes('native messaging timed out')
+    || s.includes('the operation couldn\'t be completed')
+    || s.includes('connecting to the app failed')
+}
+
+// Shorten known transient Safari errors to something readable, and strip ObjC
+// pointer dumps (<id<PKPlugIn>: 0x…>) before they reach lastSyncError.
+function sanitizeSyncError(reason) {
+  if (!reason) return reason
+  const s = String(reason)
+  if (isTransientNativeError(s)) {
+    return 'Safari is reloading the extension; try again in a moment'
+  }
+  return s.replace(/<[^>]*>/g, '').trim().slice(0, 160) || s
+}
+
+function sendNativeMessageOnce(message) {
+  if (!api.runtime.sendNativeMessage) return Promise.resolve({ ok: false, reason: 'native messaging unavailable' })
+  return new Promise(resolve => {
     let settled = false
-    const timer = setTimeout(() => finish({ ok: false, reason: 'native messaging timed out' }), HEALTH_TIMEOUT_MS)
     const finish = response => {
       if (settled) return
       settled = true
       clearTimeout(timer)
       resolve(response ?? { ok: false, reason: api.runtime.lastError?.message ?? 'empty native response' })
     }
+    const timer = setTimeout(() => finish({ ok: false, reason: 'native messaging timed out' }), HEALTH_TIMEOUT_MS)
     try {
       const result = api.runtime.sendNativeMessage(NATIVE_APP_ID, message, finish)
       if (result?.then) result.then(finish, error => finish({ ok: false, reason: String(error?.message ?? error) }))
@@ -1542,6 +1570,20 @@ async function sendNativeMessage(message) {
       }
     }
   })
+}
+
+async function sendNativeMessage(message) {
+  const delays = [0, 500, 1500]
+  let last
+  for (let i = 0; i < delays.length; i++) {
+    if (delays[i]) await new Promise(r => setTimeout(r, delays[i]))
+    last = await sendNativeMessageOnce(message)
+    if (last?.ok) return last
+    // Only retry transient failures; permanent errors (unavailable, missing
+    // payload, etc.) return immediately.
+    if (!isTransientNativeError(last?.reason)) return last
+  }
+  return last
 }
 
 async function activeTab() {
