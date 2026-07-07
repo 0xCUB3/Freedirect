@@ -811,7 +811,7 @@ async function setSyncEnabled(enabled) {
   if (emptyCloud) return await syncPush({ force: true })
   if (cloudUpdatedAt === meta.cloudUpdatedAt) return { ok: true, reason: 'unchanged' }
   await saveSyncMeta({
-    ...meta, syncEnabled: true, localDirtyAt,
+    ...meta, syncEnabled: true, localDirtyAt: null,
     cloudUpdatedAt, cloudOrigin,
     pendingConflict: { cloudUpdatedAt, cloudOrigin }
   })
@@ -1051,24 +1051,53 @@ async function rebuildRulesNow() {
       }
     }
   } else {
-    // Safari's DNR batch validator rejects valid rules that pass isRegexSupported
-    // individually, and surfaces the rejection as "Unable to parse
-    // declarativeNetRequest rules" in the Extensions panel. Clear first, then
-    // install one-by-one so the per-rule catch handles any genuine rejections
-    // without tripping the panel-level error.
-    try {
-      await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds, addRules: [] })
-    } catch (clearError) {
-      diagnostics.lastError = String(clearError?.message ?? clearError)
-    }
-    for (const rule of addRules) {
+    // Safari's DNR batch validator rejects valid rules that pass
+    // isRegexSupported individually, and surfaces the rejection as "Unable to
+    // parse declarativeNetRequest rules" in the Extensions panel. Two extra
+    // problems on Safari:
+    //
+    // 1. Stale rules from previous (buggy) builds can persist in the rule
+    //    store but NOT appear in getDynamicRules (Safari can't enumerate
+    //    unparseable rules). We blanket-clear rule IDs in our allocation range
+    //    (1000-5999) to evict them.
+    //
+    // 2. updateDynamicRules fails transiently during appex reloads (Debug
+    //    reinstalls, extension toggles) with "Unable to parse" even when the
+    //    rules are valid. We retry the clear+install with backoff to ride
+    //    through the reload window.
+    const staleRuleIds = []
+    for (let id = 1000; id <= 5999; id++) staleRuleIds.push(id)
+    const clearAllRuleIds = Array.from(new Set([...removeRuleIds, ...staleRuleIds]))
+    const installOnSafari = async () => {
       try {
-        await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: [], addRules: [rule] })
-        diagnostics.lastRuleCount += 1
-      } catch (ruleError) {
-        rejectedRules.push({ id: rule.id, reason: String(ruleError?.message ?? ruleError) })
+        await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: clearAllRuleIds, addRules: [] })
+      } catch (clearError) {
+        throw clearError
+      }
+      diagnostics.lastError = null
+      diagnostics.lastRuleCount = 0
+      for (const rule of addRules) {
+        try {
+          await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: [], addRules: [rule] })
+          diagnostics.lastRuleCount += 1
+        } catch (ruleError) {
+          rejectedRules.push({ id: rule.id, reason: String(ruleError?.message ?? ruleError) })
+        }
       }
     }
+    const safariDelays = [0, 800, 2000]
+    let safariError = null
+    for (let attempt = 0; attempt < safariDelays.length; attempt++) {
+      if (safariDelays[attempt]) await new Promise(r => setTimeout(r, safariDelays[attempt]))
+      try {
+        await installOnSafari()
+        safariError = null
+        break
+      } catch (error) {
+        safariError = String(error?.message ?? error)
+      }
+    }
+    if (safariError && diagnostics.lastRuleCount === 0) diagnostics.lastError = safariError
   }
   diagnostics.lastRejectedRules = rejectedRules.map(rejected => ({
     id: rejected.id,
