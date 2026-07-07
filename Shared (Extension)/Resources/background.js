@@ -965,24 +965,45 @@ async function rebuildRulesNow() {
   const addRules = validation.rules
   const metadataById = new Map(records.map(record => [record.rule.id, record]))
   const rejectedRules = validation.rejected.map(rejected => ({ id: rejected.id, reason: rejected.reason || 'unsupported regex' }))
-  const diagnostics = { lastGeneratedAt: new Date().toISOString(), lastRuleCount: 0, lastRejectedRules: [], lastError: null }
-  try {
-    await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds, addRules })
-    diagnostics.lastRuleCount = addRules.length
-  } catch (error) {
+  const isSafari = PROMISE_STYLE_API
+  if (!isSafari) {
     try {
-      const clearRuleIds = Array.from(new Set([...removeRuleIds, ...addRules.map(rule => rule.id)]))
-      await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: clearRuleIds, addRules: [] })
-      for (const rule of addRules) {
-        try {
-          await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: [], addRules: [rule] })
-          diagnostics.lastRuleCount += 1
-        } catch (ruleError) {
-          rejectedRules.push({ id: rule.id, reason: String(ruleError?.message ?? ruleError) })
+      await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds, addRules })
+      diagnostics.lastRuleCount = addRules.length
+    } catch (error) {
+      try {
+        const clearRuleIds = Array.from(new Set([...removeRuleIds, ...addRules.map(rule => rule.id)]))
+        await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: clearRuleIds, addRules: [] })
+        for (const rule of addRules) {
+          try {
+            await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: [], addRules: [rule] })
+            diagnostics.lastRuleCount += 1
+          } catch (ruleError) {
+            rejectedRules.push({ id: rule.id, reason: String(ruleError?.message ?? ruleError) })
+          }
         }
+      } catch (fallbackError) {
+        diagnostics.lastError = String(fallbackError?.message ?? fallbackError ?? error)
       }
-    } catch (fallbackError) {
-      diagnostics.lastError = String(fallbackError?.message ?? fallbackError ?? error)
+    }
+  } else {
+    // Safari's DNR batch validator rejects valid rules that pass isRegexSupported
+    // individually, and surfaces the rejection as "Unable to parse
+    // declarativeNetRequest rules" in the Extensions panel. Clear first, then
+    // install one-by-one so the per-rule catch handles any genuine rejections
+    // without tripping the panel-level error.
+    try {
+      await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds, addRules: [] })
+    } catch (clearError) {
+      diagnostics.lastError = String(clearError?.message ?? clearError)
+    }
+    for (const rule of addRules) {
+      try {
+        await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: [], addRules: [rule] })
+        diagnostics.lastRuleCount += 1
+      } catch (ruleError) {
+        rejectedRules.push({ id: rule.id, reason: String(ruleError?.message ?? ruleError) })
+      }
     }
   }
   diagnostics.lastRejectedRules = rejectedRules.map(rejected => ({
