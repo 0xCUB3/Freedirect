@@ -26,6 +26,8 @@
 		862606B12FE80EDB005BA1FC /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 862606732FE80EDB005BA1FC /* ViewController.swift */; };
 		862606B22FE80EDB005BA1FC /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 862606732FE80EDB005BA1FC /* ViewController.swift */; };
 		862606B32FE80EDB005BA1FC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 862606742FE80EDB005BA1FC /* Assets.xcassets */; };
+		862606072FE90EDB005BA1FC /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 862606062FE90EDB005BA1FC /* AppIcon.icon */; };
+		862606082FE90EDB005BA1FC /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 862606062FE90EDB005BA1FC /* AppIcon.icon */; };
 		862606B42FE80EDB005BA1FC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 862606742FE80EDB005BA1FC /* Assets.xcassets */; };
 		862606B52FE80EDB005BA1FC /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 862606762FE80EDB005BA1FC /* SafariWebExtensionHandler.swift */; };
 		862606B62FE80EDB005BA1FC /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 862606762FE80EDB005BA1FC /* SafariWebExtensionHandler.swift */; };
@@ -98,6 +100,7 @@
 		862606702FE80EDB005BA1FC /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
 		862606712FE80EDB005BA1FC /* Style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
 		862606722FE80EDB005BA1FC /* Script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Script.js; sourceTree = "<group>"; };
+		862606062FE90EDB005BA1FC /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer; path = AppIcon.icon; sourceTree = "<group>"; };
 		862606732FE80EDB005BA1FC /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		862606742FE80EDB005BA1FC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		862606762FE80EDB005BA1FC /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
@@ -173,6 +176,7 @@
 		8626066C2FE80EDB005BA1FC /* Shared (App) */ = {
 			isa = PBXGroup;
 			children = (
+				862606062FE90EDB005BA1FC /* AppIcon.icon */,
 				862606732FE80EDB005BA1FC /* ViewController.swift */,
 				862606742FE80EDB005BA1FC /* Assets.xcassets */,
 				8626066D2FE80EDB005BA1FC /* Resources */,
@@ -400,6 +404,7 @@
 				862606AF2FE80EDB005BA1FC /* Script.js in Resources */,
 				862606E02FE80EDC005BA1FC /* Localizable.xcstrings in Resources */,
 				862606B32FE80EDB005BA1FC /* Assets.xcassets in Resources */,
+				862606072FE90EDB005BA1FC /* AppIcon.icon in Resources */,
 				862606872FE80EDB005BA1FC /* Main.storyboard in Resources */,
 				862606AD2FE80EDB005BA1FC /* Style.css in Resources */,
 			);
@@ -413,6 +418,7 @@
 				862606B02FE80EDB005BA1FC /* Script.js in Resources */,
 				862606E12FE80EDC005BA1FC /* Localizable.xcstrings in Resources */,
 				862606B42FE80EDB005BA1FC /* Assets.xcassets in Resources */,
+				862606082FE90EDB005BA1FC /* AppIcon.icon in Resources */,
 				862606AA2FE80EDB005BA1FC /* Main.html in Resources */,
 			);
 		};
