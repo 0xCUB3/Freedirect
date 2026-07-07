@@ -743,11 +743,18 @@ async function syncPull({ manual = false } = {}) {
     await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: null })
     return { ok: true, reason: 'unchanged' }
   }
-  const localTime = meta.localDirtyAt ? Date.parse(meta.localDirtyAt) : 0
-  const cloudTime = Date.parse(cloudUpdatedAt)
-  if (meta.localDirtyAt && localTime > cloudTime) {
-    return await syncPush()
+  // Cloud moved since we last saw it (we're past the `===` check above).
+  // If local is also dirty, both sides have unsynced changes — that's a
+  // genuine divergence. Surface it as a pendingConflict so the user picks a
+  // direction, instead of silently clobbering one side.
+  if (meta.localDirtyAt) {
+    await saveSyncMeta({
+      ...meta, cloudUpdatedAt, cloudOrigin,
+      pendingConflict: { cloudUpdatedAt, cloudOrigin }
+    })
+    return { ok: true, pending: true, reason: 'pending-conflict' }
   }
+  // Only the cloud moved; local is clean — safe to import.
   if (!payload || typeof payload !== 'object' || !payload.state) {
     await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: 'invalid cloud payload' })
     return { ok: false, reason: 'invalid cloud payload' }

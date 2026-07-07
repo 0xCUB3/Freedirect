@@ -487,13 +487,31 @@ const api = globalThis.chrome ?? globalThis.browser
     }
   })
   $('syncRefresh').addEventListener('click', async () => {
-    await msg('syncRefresh')
-    await refreshSync()
+    setBusy($('syncRefresh'), true, t('working'))
+    await nextPaint()
+    try {
+      await msg('syncRefresh')
+      await refreshSync()
+      await refresh()
+    } catch (error) {
+      alert(error?.message || String(error))
+    } finally {
+      setBusy($('syncRefresh'), false)
+    }
   })
   $('syncRemoveCloud').addEventListener('click', async () => {
     if (!confirm('Remove Freedirect settings from iCloud? Your local settings on this device stay intact.')) return
-    await msg('syncRemoveCloud')
-    await refreshSync()
+    setBusy($('syncRemoveCloud'), true, t('working'))
+    await nextPaint()
+    try {
+      await msg('syncRemoveCloud')
+      await refreshSync()
+      await refresh()
+    } catch (error) {
+      alert(error?.message || String(error))
+    } finally {
+      setBusy($('syncRemoveCloud'), false)
+    }
   })
   refreshSync()
   refresh()
