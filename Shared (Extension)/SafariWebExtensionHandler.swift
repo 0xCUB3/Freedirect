@@ -126,6 +126,7 @@ final class SyncStore {
     }
 
     func read() -> [String: Any] {
+        store.synchronize()
         let payloadData = store.data(forKey: payloadKey)
         let updatedAt = store.string(forKey: updatedAtKey)
         let origin = store.string(forKey: originKey)
@@ -175,6 +176,7 @@ final class SyncStore {
     }
 
     func status() -> [String: Any] {
+        store.synchronize()
         return [
             "ok": true,
             "available": true,

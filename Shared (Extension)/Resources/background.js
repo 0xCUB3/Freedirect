@@ -57,7 +57,7 @@ const TOOLBAR_ICONS = {
 let bundledInstancesLoaded = false
 let publicInstanceRefreshStarted = false
 
-// iCloud sync state. See ICLOUD_SYNC.md.
+// iCloud sync state.
 const SYNC_PUSH_DEBOUNCE_MS = 600
 const SYNC_POLL_INTERVAL_MIN = 5
 let syncPushTimer = null
@@ -647,12 +647,44 @@ function withStateWrite(mutator) {
   return run
 }
 
-// --- iCloud sync (see ICLOUD_SYNC.md) ---
+// --- iCloud sync ---
 // Mirrors freedirectState to NSUbiquitousKeyValueStore via the native
 // messaging host in SafariWebExtensionHandler. The local store stays the
-// source of truth; cloud is a last-write-wins overlay keyed by updatedAt.
+// source of truth; cloud is an explicit user-resolved mirror when both sides
+// differ.
+function stableStringify(value) {
+  if (value == null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+  return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`
+}
+
+function hashString(value) {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+function stateHash(state) {
+  return hashString(stableStringify(state))
+}
+
+function payloadHash(payload) {
+  if (!payload || typeof payload !== 'object') return null
+  if (typeof payload.contentHash === 'string' && payload.contentHash) return payload.contentHash
+  if (!payload.state || typeof payload.state !== 'object') return null
+  return stateHash(migrateState(payload.state))
+}
+
+async function currentStateSnapshot() {
+  const state = await getState()
+  return { state, hash: stateHash(state) }
+}
+
 function defaultSyncMeta() {
-  return { syncEnabled: true, localDirtyAt: null, cloudUpdatedAt: null, cloudOrigin: null, lastSyncAt: null, lastSyncError: null, deviceId: '', pendingConflict: null }
+  return { syncEnabled: true, localDirtyAt: null, localHash: null, cloudUpdatedAt: null, cloudOrigin: null, cloudHash: null, lastSyncAt: null, lastSyncError: null, deviceId: '', pendingConflict: null }
 }
 
 async function getSyncMeta() {
@@ -695,21 +727,28 @@ async function syncPush({ force = false } = {}) {
   if (!meta.syncEnabled) return { ok: false, reason: 'disabled' }
   if (meta.pendingConflict) return { ok: false, reason: 'pending conflict' }
   if (!force && !meta.localDirtyAt) return { ok: true, reason: 'up-to-date' }
-  const state = await getState()
+  const { state, hash } = await currentStateSnapshot()
   const updatedAt = meta.localDirtyAt || new Date().toISOString()
-  const envelope = { format: 'freedirect-state', schemaVersion: state.schemaVersion, updatedAt, originDevice: meta.deviceId, state }
+  const retryDirtyAt = meta.localDirtyAt || (force ? updatedAt : null)
+  const envelope = { format: 'freedirect-state', schemaVersion: state.schemaVersion, updatedAt, originDevice: meta.deviceId, contentHash: hash, state }
   const res = await sendNativeMessage({ type: 'syncPut', payload: envelope, updatedAt })
   if (res?.available === false) {
-    await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: sanitizeSyncError(res?.reason || 'iCloud unavailable') })
+    await saveSyncMeta({ ...meta, localDirtyAt: retryDirtyAt, localHash: hash, lastSyncAt: new Date().toISOString(), lastSyncError: sanitizeSyncError(res?.reason || 'iCloud unavailable') })
     return { ok: false, reason: 'unavailable' }
   }
   if (!res?.ok) {
     const error = sanitizeSyncError(res?.error || res?.reason || 'syncPut failed')
-    await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: error })
+    await saveSyncMeta({ ...meta, localDirtyAt: retryDirtyAt, localHash: hash, lastSyncAt: new Date().toISOString(), lastSyncError: error })
     scheduleSyncPush()
     return { ok: false, reason: error }
   }
-  await saveSyncMeta({ ...meta, localDirtyAt: null, cloudUpdatedAt: res.cloudUpdatedAt || updatedAt, cloudOrigin: meta.deviceId, lastSyncAt: new Date().toISOString(), lastSyncError: null })
+  if (res.written === false) {
+    const error = 'iCloud has not accepted the upload yet'
+    await saveSyncMeta({ ...meta, localDirtyAt: retryDirtyAt, localHash: hash, lastSyncAt: new Date().toISOString(), lastSyncError: error })
+    scheduleSyncPush()
+    return { ok: false, reason: error }
+  }
+  await saveSyncMeta({ ...meta, localDirtyAt: null, localHash: hash, cloudUpdatedAt: res.cloudUpdatedAt || updatedAt, cloudOrigin: meta.deviceId, cloudHash: hash, lastSyncAt: new Date().toISOString(), lastSyncError: null })
   return { ok: true, cloudUpdatedAt: res.cloudUpdatedAt || updatedAt }
 }
 
@@ -726,48 +765,48 @@ async function syncPull({ manual = false } = {}) {
     await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: 'iCloud unavailable' })
     return { ok: false, reason: 'unavailable' }
   }
+  const { hash: localHash } = await currentStateSnapshot()
   const cloudUpdatedAt = res.cloudUpdatedAt || null
   const cloudOrigin = res.cloudOrigin || null
   const payload = res.payload
+  const cloudHash = payloadHash(payload)
   const emptyCloud = !cloudUpdatedAt || payload == null
   if (emptyCloud) {
-    if (meta.localDirtyAt) {
-      await saveSyncMeta({ ...meta, cloudUpdatedAt: null, cloudOrigin: null })
-      return await syncPush()
-    }
-    await saveSyncMeta({ ...meta, cloudUpdatedAt: null, cloudOrigin: null, lastSyncAt: new Date().toISOString(), lastSyncError: null })
+    await saveSyncMeta({ ...meta, localHash, cloudUpdatedAt: null, cloudOrigin: null, cloudHash: null })
+    if (meta.localDirtyAt || manual) return await syncPush({ force: true })
+    await saveSyncMeta({ ...meta, localHash, cloudUpdatedAt: null, cloudOrigin: null, cloudHash: null, lastSyncAt: new Date().toISOString(), lastSyncError: null })
     return { ok: true, reason: 'empty-cloud' }
   }
-  if (meta.cloudUpdatedAt === cloudUpdatedAt) {
+  if (!payload || typeof payload !== 'object' || !payload.state) {
+    await saveSyncMeta({ ...meta, localHash, cloudUpdatedAt, cloudOrigin, cloudHash, lastSyncAt: new Date().toISOString(), lastSyncError: 'invalid cloud payload' })
+    return { ok: false, reason: 'invalid cloud payload' }
+  }
+  if (cloudHash && cloudHash === localHash) {
+    await saveSyncMeta({ ...meta, localDirtyAt: null, localHash, cloudUpdatedAt, cloudOrigin, cloudHash, lastSyncAt: new Date().toISOString(), lastSyncError: null })
+    return { ok: true, reason: 'same-content' }
+  }
+  if (!manual && meta.cloudUpdatedAt === cloudUpdatedAt && (!cloudHash || meta.cloudHash === cloudHash)) {
     if (meta.localDirtyAt) return await syncPush()
-    await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: null })
+    await saveSyncMeta({ ...meta, localHash, cloudUpdatedAt, cloudOrigin, cloudHash, lastSyncAt: new Date().toISOString(), lastSyncError: null })
     return { ok: true, reason: 'unchanged' }
   }
-  // Cloud moved since we last saw it (we're past the `===` check above).
-  // If local is also dirty, both sides have unsynced changes — that's a
-  // genuine divergence. Surface it as a pendingConflict so the user picks a
-  // direction, instead of silently clobbering one side.
   if (meta.localDirtyAt) {
     await saveSyncMeta({
-      ...meta, cloudUpdatedAt, cloudOrigin,
-      pendingConflict: { cloudUpdatedAt, cloudOrigin }
+      ...meta, localHash, cloudUpdatedAt, cloudOrigin, cloudHash,
+      pendingConflict: { cloudUpdatedAt, cloudOrigin, cloudHash, localHash }
     })
     return { ok: true, pending: true, reason: 'pending-conflict' }
   }
-  // Only the cloud moved; local is clean — safe to import.
-  if (!payload || typeof payload !== 'object' || !payload.state) {
-    await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: 'invalid cloud payload' })
-    return { ok: false, reason: 'invalid cloud payload' }
-  }
   suppressLocalDirty = true
+  let imported
   try {
-    const imported = migrateState(payload.state)
+    imported = migrateState(payload.state)
     await storageSet({ freedirectState: imported })
     await rebuildRules()
   } finally {
     suppressLocalDirty = false
   }
-  await saveSyncMeta({ ...meta, localDirtyAt: null, cloudUpdatedAt, cloudOrigin, lastSyncAt: new Date().toISOString(), lastSyncError: null })
+  await saveSyncMeta({ ...meta, localDirtyAt: null, localHash: stateHash(imported), cloudUpdatedAt, cloudOrigin, cloudHash: cloudHash || stateHash(imported), lastSyncAt: new Date().toISOString(), lastSyncError: null })
   return { ok: true, reason: 'imported' }
 }
 
@@ -778,7 +817,9 @@ async function getSyncStatus() {
   return {
     syncEnabled: meta.syncEnabled,
     localDirtyAt: meta.localDirtyAt,
+    localHash: meta.localHash,
     cloudUpdatedAt: meta.cloudUpdatedAt,
+    cloudHash: meta.cloudHash,
     cloudOrigin: meta.cloudOrigin,
     lastSyncAt: meta.lastSyncAt,
     lastSyncError: meta.lastSyncError,
@@ -795,40 +836,38 @@ async function setSyncEnabled(enabled) {
     await saveSyncMeta({ ...meta, syncEnabled: false, pendingConflict: null })
     return { ok: true, syncEnabled: false }
   }
-  // Enabling sync. Probe the cloud for first-contact conflict: if both sides
-  // have state and this device has never synced with this particular cloud
-  // copy, don't silently pick a direction — surface it to the user via
-  // `pendingConflict` in `getSyncStatus`, which the options UI renders as an
-  // explicit choice. The periodic poll and `markLocalDirty` paths bail on
-  // pending conflict, so steady-state sync stays paused until resolved.
-  const localDirtyAt = new Date().toISOString()
-  await saveSyncMeta({ ...meta, syncEnabled: true, localDirtyAt, pendingConflict: null })
+  const { hash: localHash } = await currentStateSnapshot()
+  await saveSyncMeta({ ...meta, syncEnabled: true, localHash, pendingConflict: null, lastSyncError: null })
   const res = await sendNativeMessage({ type: 'syncGet' })
   if (!res?.ok) {
-    await saveSyncMeta({ ...meta, lastSyncError: sanitizeSyncError(res?.reason || res?.error || 'syncGet failed') })
+    await saveSyncMeta({ ...meta, syncEnabled: true, localHash, pendingConflict: null, lastSyncError: sanitizeSyncError(res?.reason || res?.error || 'syncGet failed') })
     return { ok: false, reason: 'syncGet failed' }
   }
   if (res.available === false) {
-    await saveSyncMeta({ ...meta, lastSyncError: 'iCloud unavailable' })
+    await saveSyncMeta({ ...meta, syncEnabled: true, localHash, pendingConflict: null, lastSyncError: 'iCloud unavailable' })
     return { ok: false, reason: 'unavailable' }
   }
   const cloudUpdatedAt = res.cloudUpdatedAt || null
   const cloudOrigin = res.cloudOrigin || null
+  const cloudHash = payloadHash(res.payload)
   const emptyCloud = !cloudUpdatedAt || res.payload == null
   if (emptyCloud) return await syncPush({ force: true })
-  if (cloudUpdatedAt === meta.cloudUpdatedAt) return { ok: true, reason: 'unchanged' }
+  if (cloudHash && cloudHash === localHash) {
+    await saveSyncMeta({ ...meta, syncEnabled: true, localDirtyAt: null, localHash, cloudUpdatedAt, cloudOrigin, cloudHash, pendingConflict: null, lastSyncAt: new Date().toISOString(), lastSyncError: null })
+    return { ok: true, reason: 'same-content' }
+  }
   await saveSyncMeta({
-    ...meta, syncEnabled: true, localDirtyAt: null,
-    cloudUpdatedAt, cloudOrigin,
-    pendingConflict: { cloudUpdatedAt, cloudOrigin }
+    ...meta, syncEnabled: true, localDirtyAt: null, localHash,
+    cloudUpdatedAt, cloudOrigin, cloudHash,
+    pendingConflict: { cloudUpdatedAt, cloudOrigin, cloudHash, localHash },
+    lastSyncError: null
   })
   return { ok: true, pending: true }
 }
 
-// Resolve a pending first-contact conflict in the chosen direction. 'local'
-// pushes this device's state to the cloud; 'cloud' imports the cloud copy,
-// replacing local. Either way clears `pendingConflict` so steady-state sync
-// resumes on the next tick.
+// Resolve a pending sync conflict in the chosen direction. 'local' pushes this
+// device's state to the cloud; 'cloud' imports the cloud copy, replacing local.
+// Either way clears `pendingConflict` so steady-state sync resumes.
 async function syncResolve(direction) {
   const meta = await getSyncMeta()
   if (!meta.pendingConflict) throw new Error('No pending sync conflict')
@@ -839,18 +878,22 @@ async function syncResolve(direction) {
     if (!res?.ok) throw new Error(res?.error || 'syncGet failed')
     const payload = res.payload
     if (!payload || typeof payload !== 'object' || !payload.state) throw new Error('invalid cloud payload')
+    const cloudHash = payloadHash(payload)
+    let imported
     suppressLocalDirty = true
     try {
-      const imported = migrateState(payload.state)
+      imported = migrateState(payload.state)
       await storageSet({ freedirectState: imported })
       await rebuildRules()
     } finally {
       suppressLocalDirty = false
     }
+    const importedHash = stateHash(imported)
     await saveSyncMeta({
-      ...meta, pendingConflict: null, localDirtyAt: null,
+      ...meta, pendingConflict: null, localDirtyAt: null, localHash: importedHash,
       cloudUpdatedAt: res.cloudUpdatedAt || null,
       cloudOrigin: res.cloudOrigin || null,
+      cloudHash: cloudHash || importedHash,
       lastSyncAt: new Date().toISOString(), lastSyncError: null
     })
     return { ok: true, reason: 'imported' }
@@ -861,7 +904,7 @@ async function syncResolve(direction) {
 async function removeSyncCloud() {
   const res = await sendNativeMessage({ type: 'syncRemove' })
   const meta = await getSyncMeta()
-  await saveSyncMeta({ ...meta, cloudUpdatedAt: null, cloudOrigin: null, localDirtyAt: null, pendingConflict: null, lastSyncAt: new Date().toISOString(), lastSyncError: null })
+  await saveSyncMeta({ ...meta, cloudUpdatedAt: null, cloudOrigin: null, cloudHash: null, localDirtyAt: null, pendingConflict: null, lastSyncAt: new Date().toISOString(), lastSyncError: null })
   return { ok: Boolean(res?.ok), removed: Boolean(res?.removed), available: Boolean(res?.available) }
 }
 
