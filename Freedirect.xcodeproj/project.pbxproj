@@ -3,10 +3,12 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 110;
 	objects = {
 
 /* Begin PBXBuildFile section */
+		862606072FE90EDB005BA1FC /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 862606062FE90EDB005BA1FC /* AppIcon.icon */; };
+		862606082FE90EDB005BA1FC /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 862606062FE90EDB005BA1FC /* AppIcon.icon */; };
 		8626067F2FE80EDB005BA1FC /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8626067E2FE80EDB005BA1FC /* AppDelegate.swift */; };
 		862606812FE80EDB005BA1FC /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 862606802FE80EDB005BA1FC /* SceneDelegate.swift */; };
 		862606842FE80EDB005BA1FC /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 862606822FE80EDB005BA1FC /* LaunchScreen.storyboard */; };
@@ -26,8 +28,6 @@
 		862606B12FE80EDB005BA1FC /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 862606732FE80EDB005BA1FC /* ViewController.swift */; };
 		862606B22FE80EDB005BA1FC /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 862606732FE80EDB005BA1FC /* ViewController.swift */; };
 		862606B32FE80EDB005BA1FC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 862606742FE80EDB005BA1FC /* Assets.xcassets */; };
-		862606072FE90EDB005BA1FC /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 862606062FE90EDB005BA1FC /* AppIcon.icon */; };
-		862606082FE90EDB005BA1FC /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 862606062FE90EDB005BA1FC /* AppIcon.icon */; };
 		862606B42FE80EDB005BA1FC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 862606742FE80EDB005BA1FC /* Assets.xcassets */; };
 		862606B52FE80EDB005BA1FC /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 862606762FE80EDB005BA1FC /* SafariWebExtensionHandler.swift */; };
 		862606B62FE80EDB005BA1FC /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 862606762FE80EDB005BA1FC /* SafariWebExtensionHandler.swift */; };
@@ -96,11 +96,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		862606062FE90EDB005BA1FC /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		8626066F2FE80EDB005BA1FC /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = Base; path = Base.lproj/Main.html; sourceTree = "<group>"; };
 		862606702FE80EDB005BA1FC /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
 		862606712FE80EDB005BA1FC /* Style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
 		862606722FE80EDB005BA1FC /* Script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Script.js; sourceTree = "<group>"; };
-		862606062FE90EDB005BA1FC /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer; path = AppIcon.icon; sourceTree = "<group>"; };
 		862606732FE80EDB005BA1FC /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		862606742FE80EDB005BA1FC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		862606762FE80EDB005BA1FC /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
@@ -128,12 +128,12 @@
 		862606E22FE80EDC005BA1FC /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		862606E32FE80EDC005BA1FC /* Freedirect.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Freedirect.entitlements; sourceTree = "<group>"; };
 		862606E42FE80EDC005BA1FC /* Freedirect Extension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Freedirect Extension.entitlements"; sourceTree = "<group>"; };
-		862606F12FE80EDC005BA1FC /* Freedirect.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Freedirect.entitlements; sourceTree = "<group>"; };
-		862606F22FE80EDC005BA1FC /* Freedirect Extension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Freedirect Extension.entitlements"; sourceTree = "<group>"; };
 		862606E72FE80EDC005BA1FC /* content-script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "content-script.js"; path = "Resources/content-script.js"; sourceTree = "<group>"; };
 		862606EA2FE80EDC005BA1FC /* popup.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = popup.js; path = Resources/popup.js; sourceTree = "<group>"; };
 		862606EB2FE80EDC005BA1FC /* options.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = options.js; path = Resources/options.js; sourceTree = "<group>"; };
 		862606F02FE80EDC005BA1FC /* instances.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = instances.json; path = Resources/instances.json; sourceTree = "<group>"; };
+		862606F12FE80EDC005BA1FC /* Freedirect.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Freedirect.entitlements; sourceTree = "<group>"; };
+		862606F22FE80EDC005BA1FC /* Freedirect Extension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Freedirect Extension.entitlements"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -163,7 +163,6 @@
 		862606672FE80EDB005BA1FC = {
 			isa = PBXGroup;
 			children = (
-				8626066C2FE80EDB005BA1FC /* Shared (App) */,
 				862606752FE80EDB005BA1FC /* Shared (Extension) */,
 				8626067D2FE80EDB005BA1FC /* iOS (App) */,
 				8626068E2FE80EDB005BA1FC /* macOS (App) */,
@@ -199,6 +198,7 @@
 		862606752FE80EDB005BA1FC /* Shared (Extension) */ = {
 			isa = PBXGroup;
 			children = (
+				8626066C2FE80EDB005BA1FC /* Shared (App) */,
 				862606C72FE80EDC005BA1FC /* Resources */,
 				862606762FE80EDB005BA1FC /* SafariWebExtensionHandler.swift */,
 			);

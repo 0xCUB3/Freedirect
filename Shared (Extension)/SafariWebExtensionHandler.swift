@@ -64,7 +64,7 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         case "syncGet":
             return SyncStore.shared.read()
         case "syncPut":
-            return SyncStore.shared.write(envelope: dictionary["payload"] as? [String: Any], updatedAt: dictionary["updatedAt"] as? String)
+            return SyncStore.shared.write(envelope: dictionary["payload"] as? [String: Any])
         case "syncRemove":
             return SyncStore.shared.remove()
         case "syncStatus":
@@ -110,14 +110,7 @@ final class SyncStore {
 
     private let store = NSUbiquitousKeyValueStore.default
     private let payloadKey = "freedirect.state.payload.v1"
-    private let updatedAtKey = "freedirect.state.updatedAt.v1"
-    private let originKey = "freedirect.state.origin.v1"
-
-    private let isoFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
+    private let lock = NSLock()
 
     private init() {
         // Pull any cloud changes that arrived while the appex was suspended.
@@ -126,62 +119,65 @@ final class SyncStore {
     }
 
     func read() -> [String: Any] {
+        lock.lock()
+        defer { lock.unlock() }
         store.synchronize()
-        let payloadData = store.data(forKey: payloadKey)
-        let updatedAt = store.string(forKey: updatedAtKey)
-        let origin = store.string(forKey: originKey)
-        let payload: Any
-        if let data = payloadData {
-            payload = (try? JSONSerialization.jsonObject(with: data, options: [])) ?? NSNull()
-        } else {
-            payload = NSNull()
-        }
+        let envelope = storedEnvelope()
         return [
             "ok": true,
             "available": true,
-            "payload": payload,
-            "cloudUpdatedAt": updatedAt ?? NSNull(),
-            "cloudOrigin": origin ?? NSNull()
+            "payload": envelope ?? NSNull(),
+            "cloudUpdatedAt": envelope?["updatedAt"] ?? NSNull(),
+            "cloudOrigin": envelope?["originDevice"] ?? NSNull()
         ]
     }
 
-    func write(envelope: [String: Any]?, updatedAt: String?) -> [String: Any] {
+    func write(envelope: [String: Any]?) -> [String: Any] {
         guard let envelope = envelope else {
             return ["ok": false, "error": "Missing payload"]
         }
+        lock.lock()
+        defer { lock.unlock() }
         do {
             let data = try JSONSerialization.data(withJSONObject: envelope, options: [])
             store.set(data, forKey: payloadKey)
-            if let updatedAt = updatedAt {
-                store.set(updatedAt, forKey: updatedAtKey)
-            } else {
-                store.set(isoFormatter.string(from: Date()), forKey: updatedAtKey)
-            }
-            if let origin = envelope["originDevice"] as? String {
-                store.set(origin, forKey: originKey)
-            }
             let synced = store.synchronize()
-            return ["ok": true, "available": true, "written": synced, "cloudUpdatedAt": store.string(forKey: updatedAtKey) ?? NSNull()]
+            return [
+                "ok": true,
+                "available": true,
+                "written": synced,
+                "cloudUpdatedAt": envelope["updatedAt"] ?? NSNull()
+            ]
         } catch {
             return ["ok": false, "error": String(error.localizedDescription)]
         }
     }
 
     func remove() -> [String: Any] {
+        lock.lock()
+        defer { lock.unlock() }
         store.removeObject(forKey: payloadKey)
-        store.removeObject(forKey: updatedAtKey)
-        store.removeObject(forKey: originKey)
         let synced = store.synchronize()
         return ["ok": true, "available": true, "removed": synced]
     }
 
     func status() -> [String: Any] {
+        lock.lock()
+        defer { lock.unlock() }
         store.synchronize()
+        let envelope = storedEnvelope()
         return [
             "ok": true,
             "available": true,
-            "cloudUpdatedAt": store.string(forKey: updatedAtKey) ?? NSNull(),
-            "cloudOrigin": store.string(forKey: originKey) ?? NSNull()
+            "cloudUpdatedAt": envelope?["updatedAt"] ?? NSNull(),
+            "cloudOrigin": envelope?["originDevice"] ?? NSNull()
         ]
+    }
+
+    private func storedEnvelope() -> [String: Any]? {
+        guard let data = store.data(forKey: payloadKey) else {
+            return nil
+        }
+        return try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
     }
 }

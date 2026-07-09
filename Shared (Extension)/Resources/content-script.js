@@ -93,7 +93,11 @@ async function rewriteRedirectableLinks() {
       pendingUrls.forEach((url, index) => {
         const target = diagnoses[index]?.redirectUrl || null
         linkRewriteCache.set(url, target)
-        if (target) for (const anchor of anchorsByUrl.get(url) ?? []) rewriteAnchorHref(anchor, target)
+        if (target) {
+          for (const anchor of anchorsByUrl.get(url) ?? []) {
+            if (unwrappedOutboundUrl(anchor.href) === url) rewriteAnchorHref(anchor, target)
+          }
+        }
       })
     }
     if (linkRewriteCache.size > 1000) linkRewriteCache.clear()
@@ -129,7 +133,7 @@ async function runFallbackRedirect() {
   try {
     const response = await send({ type: 'diagnoseUrl', url: CURRENT_URL, source: 'content-script' })
     const target = response?.diagnosis?.redirectUrl
-    if (!target || target === CURRENT_URL) return
+    if (!target || target === CURRENT_URL || location.href !== CURRENT_URL) return
     const targetUrl = new URL(target)
     if (!/^(https?|freetube|materialious):$/.test(targetUrl.protocol)) return
     location.replace(targetUrl.href)

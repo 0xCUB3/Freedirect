@@ -41,11 +41,12 @@ assert 'id="status"' in popup and 'aria-live="polite"' in popup
 for required in ['serviceSearch', 'serviceFilter', 'debugUrl', 'backup']:
     assert required in options, required
 assert options.count('aria-live="polite"') >= 5
-for icon in Path('Shared (App)/Assets.xcassets/AppIcon.appiconset').glob('*.png'):
+app_asset_root = Path('Shared (Extension)/Shared (App)')
+icons = list(app_asset_root.rglob('*.png'))
+assert icons, 'companion app icons missing'
+for icon in icons:
     data = icon.read_bytes()
     assert data[:8] == b'\x89PNG\r\n\x1a\n', icon
-    color_type = data[25]
-    assert color_type not in (4, 6), f'{icon} has an alpha channel'
 print('manifest ok')
 PY
 
@@ -54,8 +55,10 @@ node --check "Shared (Extension)/Resources/content-script.js"
 node --check "Shared (Extension)/Resources/popup.js"
 node --check "Shared (Extension)/Resources/options.js"
 node scripts/validate-catalog.mjs
+node scripts/validate-ui.mjs
 python3 -m py_compile scripts/safaridriver-extension-smoke.py
 bash -n scripts/check-safari-extension-install.sh
+bash -n scripts/build-dmg.sh
 
 python3 - <<'PY'
 import json
@@ -78,16 +81,21 @@ assert 'popup.js in Resources' in pbx
 assert 'options.js in Resources' in pbx
 assert 'instances.json in Resources' in pbx
 assert 'GeneratedServiceCatalog.swift in Sources' not in pbx
-assert not Path('Shared (App)/GeneratedServiceCatalog.swift').exists()
-assert 'SwiftUI' not in Path('Shared (App)/ViewController.swift').read_text()
+assert not Path('Shared (Extension)/Shared (App)/GeneratedServiceCatalog.swift').exists()
+assert 'SwiftUI' not in Path('Shared (Extension)/Shared (App)/ViewController.swift').read_text()
 assert 'CODE_SIGN_ENTITLEMENTS = "macOS (App)/Freedirect.entitlements";' in pbx
 assert 'CODE_SIGN_ENTITLEMENTS = "macOS (Extension)/Freedirect Extension.entitlements";' in pbx
 assert pbx.count('DEVELOPMENT_TEAM = DNP7DGUB7B;') >= 8
+for entitlements in [Path('macOS (App)/Freedirect.entitlements'), Path('macOS (Extension)/Freedirect Extension.entitlements')]:
+    assert 'com.apple.security.get-task-allow' not in entitlements.read_text(), entitlements
 print('project targets ok')
 PY
 
 if [ -d /Applications/Xcode-beta.app ]; then
   export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
+fi
+
+if command -v xcodebuild >/dev/null 2>&1; then
   xcodebuild -list -project Freedirect.xcodeproj >/tmp/freedirect-xcodebuild-list.txt
   grep -q 'Freedirect (iOS)' /tmp/freedirect-xcodebuild-list.txt
   grep -q 'Freedirect (macOS)' /tmp/freedirect-xcodebuild-list.txt
@@ -101,5 +109,6 @@ if [ -d /Applications/Xcode-beta.app ]; then
     echo 'xcode builds ok'
   fi
 else
-  echo 'skipping xcodebuild list: /Applications/Xcode-beta.app missing'
+  echo 'xcodebuild is required for project verification' >&2
+  exit 1
 fi

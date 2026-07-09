@@ -100,12 +100,20 @@ async function refresh() {
   }
 }
 
-$('enabled').addEventListener('change', event => msg('setGlobalEnabled', { enabled: event.target.checked }).then(refresh))
+$('enabled').addEventListener('change', async event => {
+  try {
+    await msg('setGlobalEnabled', { enabled: event.target.checked })
+    await refresh()
+  } catch (error) {
+    await refresh()
+    renderError(error)
+  }
+})
 $('primaryAction').addEventListener('click', () => {
   if (primaryAction === 'redirect') return msg('redirectCurrent').then(refresh).catch(error => renderError(error))
   if (primaryAction === 'reverse') return msg('reverseCurrent').then(refresh).catch(error => renderError(error))
 })
-$('farsideAction').addEventListener('click', () => msg('openFarsideCurrent').then(refresh))
+$('farsideAction').addEventListener('click', () => msg('openFarsideCurrent').then(refresh).catch(error => renderError(error)))
 async function openSettings() {
   const url = api.runtime.getURL?.('options.html')
   if (url && api.tabs?.create) {

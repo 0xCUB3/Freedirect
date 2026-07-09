@@ -536,8 +536,9 @@ function sanitizeServiceConfig(serviceId, rawConfig, defaultConfig) {
   const defaultInstance = frontends[frontend].instances[0]
   const customInstances = sanitizeStringArray(config.customInstances, normalizeInstanceOrigin)
   const favoriteInstances = sanitizeStringArray(config.favoriteInstances, normalizeInstanceOrigin)
-  const allowedInstances = new Set([...customInstances, ...favoriteInstances, ...frontends[frontend].instances])
-  const instance = normalizeConfiguredInstance(serviceId, frontend, config.instance) || normalizeInstanceOrigin(config.instance)
+  const configuredInstance = normalizeConfiguredInstance(serviceId, frontend, config.instance) || normalizeInstanceOrigin(config.instance)
+  const allowedInstances = new Set([...customInstances, ...favoriteInstances, ...frontends[frontend].instances, ...(configuredInstance ? [configuredInstance] : [])])
+  const instance = configuredInstance
   return {
     enabled: typeof config.enabled === 'boolean' ? config.enabled : defaultConfig.enabled,
     frontend,
@@ -732,31 +733,46 @@ async function syncPush({ force = false } = {}) {
   const retryDirtyAt = meta.localDirtyAt || (force ? updatedAt : null)
   const envelope = { format: 'freedirect-state', schemaVersion: state.schemaVersion, updatedAt, originDevice: meta.deviceId, contentHash: hash, state }
   const res = await sendNativeMessage({ type: 'syncPut', payload: envelope, updatedAt })
+  const latestMeta = await getSyncMeta()
+  const latestSnapshot = await currentStateSnapshot()
+  const changedWhilePushing = latestSnapshot.hash !== hash || Boolean(latestMeta.localDirtyAt && latestMeta.localDirtyAt !== updatedAt)
+  const pendingDirtyAt = changedWhilePushing ? (latestMeta.localDirtyAt || new Date().toISOString()) : retryDirtyAt
   if (res?.available === false) {
-    await saveSyncMeta({ ...meta, localDirtyAt: retryDirtyAt, localHash: hash, lastSyncAt: new Date().toISOString(), lastSyncError: sanitizeSyncError(res?.reason || 'iCloud unavailable') })
+    await saveSyncMeta({ ...latestMeta, localDirtyAt: pendingDirtyAt, localHash: latestSnapshot.hash, lastSyncAt: new Date().toISOString(), lastSyncError: sanitizeSyncError(res?.reason || 'iCloud unavailable') })
     return { ok: false, reason: 'unavailable' }
   }
   if (!res?.ok) {
     const error = sanitizeSyncError(res?.error || res?.reason || 'syncPut failed')
-    await saveSyncMeta({ ...meta, localDirtyAt: retryDirtyAt, localHash: hash, lastSyncAt: new Date().toISOString(), lastSyncError: error })
+    await saveSyncMeta({ ...latestMeta, localDirtyAt: pendingDirtyAt, localHash: latestSnapshot.hash, lastSyncAt: new Date().toISOString(), lastSyncError: error })
     scheduleSyncPush()
     return { ok: false, reason: error }
   }
   if (res.written === false) {
     const error = 'iCloud has not accepted the upload yet'
-    await saveSyncMeta({ ...meta, localDirtyAt: retryDirtyAt, localHash: hash, lastSyncAt: new Date().toISOString(), lastSyncError: error })
+    await saveSyncMeta({ ...latestMeta, localDirtyAt: pendingDirtyAt, localHash: latestSnapshot.hash, lastSyncAt: new Date().toISOString(), lastSyncError: error })
     scheduleSyncPush()
     return { ok: false, reason: error }
   }
-  await saveSyncMeta({ ...meta, localDirtyAt: null, localHash: hash, cloudUpdatedAt: res.cloudUpdatedAt || updatedAt, cloudOrigin: meta.deviceId, cloudHash: hash, lastSyncAt: new Date().toISOString(), lastSyncError: null })
-  return { ok: true, cloudUpdatedAt: res.cloudUpdatedAt || updatedAt }
+  await saveSyncMeta({
+    ...latestMeta,
+    localDirtyAt: changedWhilePushing ? pendingDirtyAt : null,
+    localHash: latestSnapshot.hash,
+    cloudUpdatedAt: res.cloudUpdatedAt || updatedAt,
+    cloudOrigin: meta.deviceId,
+    cloudHash: hash,
+    lastSyncAt: new Date().toISOString(),
+    lastSyncError: null
+  })
+  if (changedWhilePushing) scheduleSyncPush()
+  return { ok: true, pending: changedWhilePushing, cloudUpdatedAt: res.cloudUpdatedAt || updatedAt }
 }
 
 async function syncPull({ manual = false } = {}) {
-  const meta = await getSyncMeta()
-  if (!meta.syncEnabled && !manual) return { ok: false, reason: 'disabled' }
-  if (meta.pendingConflict) return { ok: false, reason: 'pending conflict' }
+  const initialMeta = await getSyncMeta()
+  if (!initialMeta.syncEnabled && !manual) return { ok: false, reason: 'disabled' }
+  if (initialMeta.pendingConflict) return { ok: false, reason: 'pending conflict' }
   const res = await sendNativeMessage({ type: 'syncGet' })
+  const meta = await getSyncMeta()
   if (!res?.ok) {
     await saveSyncMeta({ ...meta, lastSyncAt: new Date().toISOString(), lastSyncError: sanitizeSyncError(res?.reason || res?.error || 'syncGet failed') })
     return { ok: false, reason: 'syncGet failed' }
@@ -797,16 +813,44 @@ async function syncPull({ manual = false } = {}) {
     })
     return { ok: true, pending: true, reason: 'pending-conflict' }
   }
+
+  const cloudState = migrateState(payload.state)
+  let blockedConflict = null
   suppressLocalDirty = true
-  let imported
   try {
-    imported = migrateState(payload.state)
-    await storageSet({ freedirectState: imported })
-    await rebuildRules()
+    await withStateWrite(async latest => {
+      const latestMeta = await getSyncMeta()
+      const latestHash = stateHash(latest)
+      if (latestMeta.localDirtyAt || latestHash !== localHash) {
+        blockedConflict = { cloudUpdatedAt, cloudOrigin, cloudHash, localHash: latestHash }
+        return latest
+      }
+      for (const key of Object.keys(latest)) delete latest[key]
+      Object.assign(latest, cloudState)
+    })
   } finally {
     suppressLocalDirty = false
   }
-  await saveSyncMeta({ ...meta, localDirtyAt: null, localHash: stateHash(imported), cloudUpdatedAt, cloudOrigin, cloudHash: cloudHash || stateHash(imported), lastSyncAt: new Date().toISOString(), lastSyncError: null })
+  if (blockedConflict) {
+    const latestMeta = await getSyncMeta()
+    await saveSyncMeta({ ...latestMeta, localHash: blockedConflict.localHash, cloudUpdatedAt, cloudOrigin, cloudHash, pendingConflict: blockedConflict })
+    return { ok: true, pending: true, reason: 'pending-conflict' }
+  }
+
+  await rebuildRules()
+  const importedHash = stateHash(cloudState)
+  const postImportMeta = await getSyncMeta()
+  await saveSyncMeta({
+    ...postImportMeta,
+    localDirtyAt: postImportMeta.localDirtyAt || null,
+    localHash: postImportMeta.localDirtyAt ? (await currentStateSnapshot()).hash : importedHash,
+    cloudUpdatedAt,
+    cloudOrigin,
+    cloudHash: cloudHash || importedHash,
+    lastSyncAt: new Date().toISOString(),
+    lastSyncError: null
+  })
+  if (postImportMeta.localDirtyAt) scheduleSyncPush()
   return { ok: true, reason: 'imported' }
 }
 
@@ -1124,33 +1168,30 @@ async function rebuildRulesNow() {
     //    rules are valid. We retry with backoff to ride through the reload
     //    window.
     //
-    // CRITICAL: install new rules BEFORE clearing old ones. The previous
-    // clear-then-install pattern left a multi-hundred-ms window during
-    // which ZERO rules were in effect — navigations that arrived in that
-    // window saw no DNR match, the original page started loading, and the
-    // content-script fallback had to fire location.replace after the fact.
-    // Installing first guarantees at every moment either the old rules or
-    // the new rules are live, never neither.
-    // Stale-rule sweep covers our allocation range (1000-5999) to evict
-    // rules from previous builds that Safari can't enumerate via
-    // getDynamicRules (unparseable rules are invisible). But we MUST
-    // exclude IDs we're about to install in Phase 1 — otherwise Phase 2's
-    // clear would wipe the rules we just put in. Conflicting stale rules
-    // get cleanly replaced by Phase 1's install (DNR IDs are unique; an
-    // add with an existing ID overwrites the previous rule at that ID).
+    // CRITICAL: replace new rules BEFORE clearing stale ones. Each rule is
+    // removed and added in the same updateDynamicRules call so an existing ID
+    // cannot reject the replacement, while every unrelated old rule remains
+    // active. The previous clear-then-install pattern left a multi-hundred-ms
+    // window with no redirect rules.
+    //
+    // Stale-rule sweep covers our allocation range (1000-5999) to evict rules
+    // from previous builds that Safari can't enumerate via getDynamicRules.
+    // IDs installed in Phase 1 must be excluded from Phase 2's removal set.
     const newIds = new Set(addRules.map(rule => rule.id))
     const staleRuleIds = []
     for (let id = 1000; id <= 5999; id++) if (!newIds.has(id)) staleRuleIds.push(id)
-    const clearAllRuleIds = Array.from(new Set([...removeRuleIds, ...staleRuleIds]))
+    const clearAllRuleIds = Array.from(new Set([
+      ...removeRuleIds.filter(id => !newIds.has(id)),
+      ...staleRuleIds
+    ]))
     const installOnSafari = async () => {
-      // Phase 1: install new rules one-by-one (Safari rejects large batches).
-      // Old rules are still in effect during this phase, so there's no window
-      // where matching navigations fall through to the original page.
+      // Phase 1: atomically replace new rules one-by-one (Safari rejects large
+      // batches). Unrelated old rules remain active throughout.
       diagnostics.lastError = null
       diagnostics.lastRuleCount = 0
       for (const rule of addRules) {
         try {
-          await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: [], addRules: [rule] })
+          await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: [rule.id], addRules: [rule] })
           diagnostics.lastRuleCount += 1
         } catch (ruleError) {
           rejectedRules.push({ id: rule.id, reason: String(ruleError?.message ?? ruleError) })
@@ -1308,7 +1349,7 @@ function reverseUrl(urlString, state) {
 }
 
 function farsideFallbackRedirect(urlString, state, { respectGlobal = true } = {}) {
-  if (respectGlobal && !state?.farsideFallbackEnabled) return null
+  if (!state?.farsideFallbackEnabled || (respectGlobal && !state?.globalEnabled)) return null
   let url
   try { url = new URL(urlString) } catch { return null }
   if (url.origin === farsideBaseUrl(state)) return null
@@ -1371,8 +1412,7 @@ function clearFarsideFallbackTimer(tabId) {
 
 function scheduleFarsideFallbackTimer(tabId, url, state, delay = FARSIDE_LOAD_FALLBACK_MS) {
   if (!api.webNavigation?.onCompleted || tabId === undefined || tabId < 0) return
-  const target = farsideFallbackRedirect(url, state)
-  if (!target) return
+  if (!farsideFallbackRedirect(url, state)) return
   clearFarsideFallbackTimer(tabId)
   const timer = setTimeout(async () => {
     pendingFarsideFallbacks.delete(tabId)
@@ -1381,7 +1421,9 @@ function scheduleFarsideFallbackTimer(tabId, url, state, delay = FARSIDE_LOAD_FA
         const tab = await callApi(api.tabs, 'get', tabId)
         if (tab?.url !== url) return
       }
-      await apiTabsUpdate(tabId, { url: target })
+      const latestState = await getState()
+      const target = farsideFallbackRedirect(url, latestState)
+      if (target) await apiTabsUpdate(tabId, { url: target })
     } catch {}
   }, delay)
   pendingFarsideFallbacks.set(tabId, timer)
@@ -1788,9 +1830,9 @@ async function allowOriginalUrl(tabId, url) {
   // Mark the URL as bypassed in persisted state first, regardless of whether
   // the DNR allow rule can be installed. The content-script fallback checks
   // this list to avoid re-redirecting the original back to the frontend.
-  const state = await getState()
-  state.diagnostics.bypassedUrls = [original, ...(state.diagnostics.bypassedUrls ?? []).filter(value => value !== original)].slice(0, 20)
-  await saveState(state)
+  await withStateWrite(state => {
+    state.diagnostics.bypassedUrls = [original, ...(state.diagnostics.bypassedUrls ?? []).filter(value => value !== original)].slice(0, 20)
+  })
   try {
     const existing = await callApi(api.declarativeNetRequest, 'getSessionRules')
     const id = SESSION_RULE_ID_BASE + Math.max(1, Number(tabId || 1))
@@ -1896,9 +1938,8 @@ function bypassHostsForUrl(url) {
 function bypassRegexForUrl(value) {
   const url = new URL(value)
   const hosts = bypassHostsForUrl(url).map(escapeRegex).join('|')
-  const path = url.pathname === '/' ? '/' : url.pathname.replace(/\/+$/, '')
-  const pathPattern = path === '/' ? '/?' : `${escapeRegex(path)}/?`
-  return `^https?://(${hosts})${pathPattern}([?#].*)?$`
+  const pathAndQuery = `${url.pathname}${url.search}`
+  return `^https?://(${hosts})${escapeRegex(pathAndQuery)}(?:#.*)?$`
 }
 
 function isBypassedUrl(value, state) {
@@ -1927,9 +1968,7 @@ async function clearBypasses() {
   const existing = await callApi(api.declarativeNetRequest, 'getSessionRules')
   const removeRuleIds = existing.filter(rule => rule.id >= SESSION_RULE_ID_BASE).map(rule => rule.id)
   await callApi(api.declarativeNetRequest, 'updateSessionRules', { removeRuleIds, addRules: [] })
-  const state = await getState()
-  state.diagnostics.bypassedUrls = []
-  await saveState(state)
+  await withStateWrite(state => { state.diagnostics.bypassedUrls = [] })
   return { cleared: removeRuleIds.length }
 }
 
@@ -2050,6 +2089,10 @@ api.webNavigation?.onBeforeNavigate?.addListener(async details => {
     await redirectNavigationUrl(details.tabId, details.url)
   } catch {}
 })
+api.webNavigation?.onHistoryStateUpdated?.addListener(async details => {
+  if (details.frameId !== 0 || details.tabId === undefined || !/^https?:/.test(details.url || '')) return
+  try { await redirectNavigationUrl(details.tabId, details.url, { rescue: true }) } catch {}
+})
 api.webNavigation?.onCompleted?.addListener(details => {
   if (details.frameId === 0 && details.tabId !== undefined) {
     clearFarsideFallbackTimer(details.tabId)
@@ -2118,35 +2161,38 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'getState':
         return { state, catalog: SERVICE_CATALOG, profiles: { ...PROFILES, ...(state.customProfiles ?? {}) }, farside: { baseUrl: farsideBaseUrl(state), supportedFrontends: FARSIDE_FRONTEND_MAP }, limitations: RESEARCHED_LIMITATIONS, permissions: await permissionState(), activeTabPermissions: await activeTabPermissionState() }
       case 'setGlobalEnabled': {
-        state.globalEnabled = Boolean(message.enabled)
-        await saveState(state)
+        await withStateWrite(latest => { latest.globalEnabled = Boolean(message.enabled) })
         const diagnostics = await rebuildRules()
         await updateCurrentActionIcon()
         return { diagnostics }
       }
       case 'setFarsideBaseUrl': {
-        state.farsideBaseUrl = normalizeFarsideBaseUrl(message.url)
-        await saveState(state)
-        return { diagnostics: await rebuildRules(), farsideBaseUrl: state.farsideBaseUrl }
+        const farsideBaseUrl = normalizeInstanceOrigin(message.url)
+        if (!farsideBaseUrl) throw new Error('Farside URL must be an HTTPS origin')
+        await withStateWrite(latest => { latest.farsideBaseUrl = farsideBaseUrl })
+        return { diagnostics: await rebuildRules(), farsideBaseUrl }
       }
       case 'setFarsideFallbackEnabled': {
-        state.farsideFallbackEnabled = Boolean(message.enabled)
-        await saveState(state)
-        return { farsideFallbackEnabled: state.farsideFallbackEnabled }
+        const farsideFallbackEnabled = Boolean(message.enabled)
+        await withStateWrite(latest => { latest.farsideFallbackEnabled = farsideFallbackEnabled })
+        return { farsideFallbackEnabled }
       }
       case 'updateService': {
-        const service = state.services[message.serviceId]
-        if (!service) throw new Error('Unknown service')
-        const wasEnabled = Boolean(service.enabled)
+        let wasEnabled = false
+        let updatedInstance = null
         const wantsEnabled = message.patch?.enabled === true
-        state.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, service, message.patch)
-        await saveState(state)
+        await withStateWrite(latest => {
+          const service = latest.services[message.serviceId]
+          if (!service) throw new Error('Unknown service')
+          wasEnabled = Boolean(service.enabled)
+          latest.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, service, message.patch)
+          updatedInstance = latest.services[message.serviceId].instance
+        })
         if (wantsEnabled) {
           if (!wasEnabled) {
-            try { await selectBestInstance(message.serviceId) } catch { await checkInstanceHealth(message.serviceId, state.services[message.serviceId].instance).catch(() => null) }
+            try { await selectBestInstance(message.serviceId) } catch { await checkInstanceHealth(message.serviceId, updatedInstance).catch(() => null) }
           } else {
-            const instance = state.services[message.serviceId].instance
-            const health = await checkInstanceHealth(message.serviceId, instance).catch(() => ({ ok: false }))
+            const health = await checkInstanceHealth(message.serviceId, updatedInstance).catch(() => ({ ok: false }))
             if (!health?.ok) await selectBestInstance(message.serviceId).catch(() => null)
           }
         }
@@ -2155,8 +2201,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { diagnostics }
       }
       case 'applyProfile': {
-        applyProfile(state, message.profile)
-        await saveState(state)
+        await withStateWrite(latest => { applyProfile(latest, message.profile) })
         const diagnostics = await rebuildRules()
         await updateCurrentActionIcon()
         return { diagnostics }
@@ -2165,88 +2210,101 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const name = String(message.name || '').trim().slice(0, 80)
         if (!name) throw new Error('Profile needs a name')
         const id = `custom-${Date.now()}`
-        state.customProfiles = { ...(state.customProfiles ?? {}), [id]: { name, enabledServices: Object.entries(state.services).filter(([, config]) => config.enabled).map(([serviceId]) => serviceId) } }
-        state.profile = id
-        await saveState(state)
+        await withStateWrite(latest => {
+          latest.customProfiles = { ...(latest.customProfiles ?? {}), [id]: { name, enabledServices: Object.entries(latest.services).filter(([, config]) => config.enabled).map(([serviceId]) => serviceId) } }
+          latest.profile = id
+        })
         return { profile: id }
       }
       case 'setAllServices': {
         const enabled = Boolean(message.enabled)
-        for (const service of Object.values(state.services)) service.enabled = enabled
-        state.profile = 'manual'
-        await saveState(state)
+        await withStateWrite(latest => {
+          for (const service of Object.values(latest.services)) service.enabled = enabled
+          latest.profile = 'manual'
+        })
         const diagnostics = await rebuildRules()
         await updateCurrentActionIcon()
         return { diagnostics }
       }
       case 'resetState': {
-        await saveState(defaultState())
+        await withStateWrite(latest => {
+          for (const key of Object.keys(latest)) delete latest[key]
+          Object.assign(latest, defaultState())
+        })
         const diagnostics = await rebuildRules()
         await updateCurrentActionIcon()
         return { diagnostics }
       }
       case 'addCustomInstance': {
-        const config = state.services[message.serviceId]
-        if (!config) throw new Error('Unknown service')
         const instance = normalizeInstanceOrigin(message.instance)
         if (!instance) throw new Error('Custom instance must be an HTTPS URL')
-        const customInstances = Array.from(new Set([instance, ...(config.customInstances ?? [])]))
-        state.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, { customInstances, instance })
-        await saveState(state)
+        await withStateWrite(latest => {
+          const config = latest.services[message.serviceId]
+          if (!config) throw new Error('Unknown service')
+          const frontend = message.frontend ?? config.frontend
+          if (!(frontend in serviceFrontends(SERVICE_CATALOG[message.serviceId], config))) throw new Error('Unknown frontend')
+          const customInstances = Array.from(new Set([instance, ...(config.customInstances ?? [])]))
+          latest.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, { customInstances, frontend, instance })
+        })
         return { diagnostics: await rebuildRules() }
       }
       case 'addCustomFrontend': {
-        const config = state.services[message.serviceId]
-        if (!config) throw new Error('Unknown service')
         const id = sanitizeCustomFrontendId(message.frontendId || message.name)
         if (!id) throw new Error('Custom frontend needs a name')
         const instance = normalizeInstanceOrigin(message.instance)
         if (!instance) throw new Error('Custom frontend instance must be an HTTPS URL')
-        const customFrontends = sanitizeCustomFrontends({ ...(config.customFrontends ?? {}), [id]: { name: message.name || id.replace(/^custom:/, ''), instances: [instance] } })
-        state.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, { customFrontends, frontend: id, instance })
-        await saveState(state)
+        await withStateWrite(latest => {
+          const config = latest.services[message.serviceId]
+          if (!config) throw new Error('Unknown service')
+          const customFrontends = sanitizeCustomFrontends({ ...(config.customFrontends ?? {}), [id]: { name: message.name || id.replace(/^custom:/, ''), instances: [instance] } })
+          latest.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, { customFrontends, frontend: id, instance })
+        })
         return { diagnostics: await rebuildRules() }
       }
       case 'removeCustomFrontend': {
-        const config = state.services[message.serviceId]
-        if (!config) throw new Error('Unknown service')
-        const id = sanitizeCustomFrontendId(String(message.frontendId || '').replace(/^custom:/, ''))
-        if (!id || !config.customFrontends?.[id]) throw new Error('Unknown custom frontend')
-        const customFrontends = { ...(config.customFrontends ?? {}) }
-        delete customFrontends[id]
-        const patch = { customFrontends }
-        if (config.frontend === id) patch.frontend = SERVICE_CATALOG[message.serviceId].defaultFrontend
-        state.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, patch)
-        await saveState(state)
+        await withStateWrite(latest => {
+          const config = latest.services[message.serviceId]
+          if (!config) throw new Error('Unknown service')
+          const id = sanitizeCustomFrontendId(String(message.frontendId || '').replace(/^custom:/, ''))
+          if (!id || !config.customFrontends?.[id]) throw new Error('Unknown custom frontend')
+          const customFrontends = { ...(config.customFrontends ?? {}) }
+          delete customFrontends[id]
+          const patch = { customFrontends }
+          if (config.frontend === id) patch.frontend = SERVICE_CATALOG[message.serviceId].defaultFrontend
+          latest.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, patch)
+        })
         return { diagnostics: await rebuildRules() }
       }
       case 'removeCustomInstance': {
-        const config = state.services[message.serviceId]
-        if (!config) throw new Error('Unknown service')
         const instance = normalizeInstanceOrigin(message.instance)
         if (!instance) throw new Error('Custom instance must be an HTTPS URL')
-        const customInstances = (config.customInstances ?? []).filter(value => value !== instance)
-        const favoriteInstances = (config.favoriteInstances ?? []).filter(value => value !== instance)
-        const service = SERVICE_CATALOG[message.serviceId]
-        const frontends = serviceFrontends(service, config)
-        const frontend = config.frontend in frontends ? config.frontend : service.defaultFrontend
-        const patch = { customInstances, favoriteInstances }
-        if (config.instance === instance) patch.instance = frontends[frontend].instances[0]
-        state.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, patch)
-        await saveState(state)
+        await withStateWrite(latest => {
+          const config = latest.services[message.serviceId]
+          if (!config) throw new Error('Unknown service')
+          const customInstances = (config.customInstances ?? []).filter(value => value !== instance)
+          const favoriteInstances = (config.favoriteInstances ?? []).filter(value => value !== instance)
+          const service = SERVICE_CATALOG[message.serviceId]
+          const frontends = serviceFrontends(service, config)
+          const frontend = config.frontend in frontends ? config.frontend : service.defaultFrontend
+          const patch = { customInstances, favoriteInstances }
+          if (config.instance === instance) patch.instance = frontends[frontend].instances[0]
+          latest.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, patch)
+        })
         return { diagnostics: await rebuildRules() }
       }
       case 'toggleFavoriteInstance': {
-        const config = state.services[message.serviceId]
-        if (!config) throw new Error('Unknown service')
         const instance = normalizeInstanceOrigin(message.instance)
         if (!instance) throw new Error('Favorite instance must be an HTTPS URL')
-        const favorites = new Set(config.favoriteInstances ?? [])
-        if (favorites.has(instance)) favorites.delete(instance)
-        else favorites.add(instance)
-        state.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, { favoriteInstances: Array.from(favorites) })
-        await saveState(state)
-        return { favorites: state.services[message.serviceId].favoriteInstances }
+        const favorites = await withStateWrite(latest => {
+          const config = latest.services[message.serviceId]
+          if (!config) throw new Error('Unknown service')
+          const nextFavorites = new Set(config.favoriteInstances ?? [])
+          if (nextFavorites.has(instance)) nextFavorites.delete(instance)
+          else nextFavorites.add(instance)
+          latest.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, config, { favoriteInstances: Array.from(nextFavorites) })
+          return latest.services[message.serviceId].favoriteInstances
+        })
+        return { favorites }
       }
       case 'checkInstanceHealth':
         return { health: await checkInstanceHealth(message.serviceId, message.instance) }
@@ -2302,7 +2360,10 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { exported: { format: 'freedirect-state', schemaVersion: state.schemaVersion, exportedAt: new Date().toISOString(), state } }
       case 'importState': {
         const importedState = message.state?.format === 'freedirect-state' ? message.state.state : message.state
-        await saveState(migrateState(importedState))
+        await withStateWrite(latest => {
+          for (const key of Object.keys(latest)) delete latest[key]
+          Object.assign(latest, migrateState(importedState))
+        })
         return { diagnostics: await rebuildRules() }
       }
       case 'requestAllHosts': {

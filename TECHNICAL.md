@@ -15,19 +15,17 @@
 - `Shared (Extension)/Resources/content-script.js` — `document_start` fallback redirect path
 - `Shared (Extension)/Resources/options.html` / `options.js` — extension-owned settings UI
 - `Shared (Extension)/Resources/popup.html` / `popup.js` — toolbar popup
-- `Shared (Extension)/Resources/static_rules.json` — static DNR bootstrap rules for high-impact services
 - `Shared (Extension)/Resources/instances.json` — bundled public instance snapshot
-- `Shared (App)/ViewController.swift` — minimal companion WebView setup screen
+- `Shared (Extension)/Shared (App)/ViewController.swift` — minimal companion WebView setup screen
 
 Settings are stored in `browser.storage.local` under `freedirectState`. The native app does not mirror or own redirect settings.
 
 ## Redirect pipeline
 
-1. Static DNR rules cover selected high-impact defaults only during first-install bootstrap.
-2. Dynamic DNR rules are generated from the configured service catalog; once initialized, the static ruleset is disabled so stale defaults cannot override custom instances.
-3. `webNavigation.onBeforeNavigate` and `tabs.onUpdated` handle app-protocol redirects and Safari race cases.
-4. `webNavigation.onErrorOccurred` retries redirectable failed main-frame navigations, useful when DNS blocking wins before Safari finishes extension handling.
-5. `content-script.js` provides a last-resort `document_start` redirect path when a page can load.
+1. Dynamic DNR rules are generated from the configured service catalog and replaced one at a time so Safari never sees an empty ruleset.
+2. `webNavigation.onBeforeNavigate`, `onHistoryStateUpdated`, and `tabs.onUpdated` handle app-protocol redirects, SPA navigation, and Safari race cases.
+3. `webNavigation.onErrorOccurred` retries redirectable failed main-frame navigations, useful when DNS blocking wins before Safari finishes extension handling.
+4. `content-script.js` provides a last-resort `document_start` redirect path when a page can load.
 
 App-protocol frontends such as FreeTube and Materialious use app URL schemes and are intentionally excluded from DNR generation.
 
@@ -50,10 +48,12 @@ Unsigned builds are not the intended path. Use Apple Development signing for loc
 Manual DMG build:
 
 ```sh
-VERSION=0.1.0 scripts/build-dmg.sh
+SIGNING_IDENTITY="Developer ID Application: …" VERSION=0.1.0 scripts/build-dmg.sh
 ```
 
-The script builds the macOS target, optionally signs with `SIGNING_IDENTITY`, and writes:
+`SIGNING_IDENTITY` is required. If `VERSION` is provided, it must match the extension manifest version.
+
+The script writes:
 
 ```text
 build/homebrew/Freedirect-${VERSION}.dmg

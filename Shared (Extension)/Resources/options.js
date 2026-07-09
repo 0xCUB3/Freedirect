@@ -291,11 +291,11 @@ const api = globalThis.chrome ?? globalThis.browser
     $('profileDialog').close()
     await msg('saveProfile', { name }).then(refresh)
   })
-  $('enableAll').addEventListener('click', () => {
+  $('enableAll').addEventListener('click', event => {
     if (!confirm('Enable all services? This will enable every redirect.')) return
     runButtonAction(event.currentTarget, 'Enabling…', async () => { await msg('setAllServices', { enabled: true }); await refresh(); await checkEnabledProgressively() }, { refreshAfter: false })
   })
-  $('disableAll').addEventListener('click', () => {
+  $('disableAll').addEventListener('click', event => {
     if (!confirm('Disable all services? No redirects will be active.')) return
     runButtonAction(event.currentTarget, 'Disabling…', () => msg('setAllServices', { enabled: false }))
   })
@@ -328,9 +328,14 @@ const api = globalThis.chrome ?? globalThis.browser
     const status = row.querySelector('.badge')
     if ((field === 'instance' || field === 'frontend' || field === 'enabled') && status) status.textContent = field === 'enabled' && !event.target.checked ? t('notChecked') : 'checking…'
     await nextPaint()
-    await msg('updateService', { serviceId, patch })
-    await refresh()
-    if ((field === 'instance' || field === 'frontend' || field === 'enabled') && current.state.services[serviceId]?.enabled) await checkServiceOrBest(serviceId, { selectBestWhenUnchecked: field === 'enabled' && event.target.checked })
+    try {
+      await msg('updateService', { serviceId, patch })
+      await refresh()
+      if ((field === 'instance' || field === 'frontend' || field === 'enabled') && current.state.services[serviceId]?.enabled) await checkServiceOrBest(serviceId, { selectBestWhenUnchecked: field === 'enabled' && event.target.checked })
+    } catch (error) {
+      await refresh()
+      alert(error?.message || String(error))
+    }
   })
   $('services').addEventListener('click', async event => {
     const button = event.target.closest('button[data-action]')
@@ -380,11 +385,10 @@ const api = globalThis.chrome ?? globalThis.browser
     const frontendType = $('customFrontendType').value
     const name = $('customFrontendName').value.trim()
     try {
-      if (frontendType === '__new__') await msg('addCustomFrontend', { serviceId: customServiceId, name, instance })
-      else {
-        await msg('updateService', { serviceId: customServiceId, patch: { frontend: frontendType } })
-        await msg('addCustomInstance', { serviceId: customServiceId, instance })
-      }
+      const url = new URL(instance)
+      if (url.protocol !== 'https:') throw new Error('Custom instance must be an HTTPS URL')
+      if (frontendType === '__new__') await msg('addCustomFrontend', { serviceId: customServiceId, name, instance: url.origin })
+      else await msg('addCustomInstance', { serviceId: customServiceId, frontend: frontendType, instance: url.origin })
       $('customDialog').close()
       await refresh()
     } catch (error) { alert(error?.message || String(error)) }
@@ -420,8 +424,15 @@ const api = globalThis.chrome ?? globalThis.browser
   })
   $('export').addEventListener('click', async () => { $('backup').value = JSON.stringify((await msg('exportState')).exported, null, 2) })
   $('import').addEventListener('click', async () => {
-    try { await msg('importState', { state: JSON.parse($('backup').value) }); await refresh() }
-    catch (error) { alert(`Import failed: ${error.message || error}`) }
+    try {
+      const imported = JSON.parse($('backup').value)
+      const state = imported?.format === 'freedirect-state' ? imported.state : imported
+      if (!state || typeof state !== 'object' || Array.isArray(state) || !Number.isFinite(state.schemaVersion) || !state.services || typeof state.services !== 'object' || Array.isArray(state.services)) {
+        throw new Error('Backup must contain a Freedirect settings object')
+      }
+      await msg('importState', { state: imported })
+      await refresh()
+    } catch (error) { alert(`Import failed: ${error.message || error}`) }
   })
 
   function formatSyncStatus(status) {
@@ -467,8 +478,13 @@ const api = globalThis.chrome ?? globalThis.browser
   }
 
   $('syncEnabled').addEventListener('change', async event => {
-    await msg('syncSetEnabled', { enabled: event.target.checked })
-    await refreshSync()
+    try {
+      await msg('syncSetEnabled', { enabled: event.target.checked })
+    } catch (error) {
+      alert(error?.message || String(error))
+    } finally {
+      await refreshSync()
+    }
   })
 
   $('syncResolveApply').addEventListener('click', async () => {

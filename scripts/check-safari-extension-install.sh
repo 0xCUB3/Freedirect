@@ -10,11 +10,13 @@ if [ "${1:-}" = "--open" ]; then
 fi
 
 echo "Building macOS app..."
-xcodebuild -project Freedirect.xcodeproj -scheme 'Freedirect (macOS)' -configuration Debug build >/tmp/freedirect-macos-build.log
+DERIVED_DATA="${TMPDIR:-/tmp}/Freedirect-DerivedData"
+rm -rf "$DERIVED_DATA"
+xcodebuild -project Freedirect.xcodeproj -scheme 'Freedirect (macOS)' -configuration Debug -derivedDataPath "$DERIVED_DATA" build >/tmp/freedirect-macos-build.log
 
-APP="$(find ~/Library/Developer/Xcode/DerivedData/Freedirect-* -path '*/Build/Products/Debug/Freedirect.app' -type d | grep -v Index | head -1 || true)"
-if [ -z "$APP" ]; then
-  echo "FAIL: built Freedirect.app was not found in DerivedData"
+APP="$DERIVED_DATA/Build/Products/Debug/Freedirect.app"
+if [ ! -d "$APP" ]; then
+  echo "FAIL: built Freedirect.app was not found at $APP"
   exit 1
 fi
 
@@ -75,8 +77,12 @@ else
     if pluginkit -m -p com.apple.Safari.web-extension 2>/dev/null | grep -q "$BUNDLE_ID"; then
       echo "pluginkit: registered after LaunchServices refresh"
     else
-      echo "pluginkit: still not registered"
+      echo "FAIL: pluginkit still does not list $BUNDLE_ID after LaunchServices refresh" >&2
+      exit 1
     fi
+  else
+    echo "FAIL: LaunchServices registration tool is unavailable" >&2
+    exit 1
   fi
 fi
 

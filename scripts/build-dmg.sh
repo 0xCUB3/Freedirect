@@ -13,11 +13,17 @@ APP_PATH="${DERIVED_DATA}/Build/Products/${CONFIGURATION}/Freedirect.app"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:-}"
 VERSION="${VERSION:-}"
 TEAM_ID="${TEAM_ID:-DNP7DGUB7B}"
-if [[ -n "${VERSION}" ]]; then
-  DMG_NAME="Freedirect-${VERSION}.dmg"
-else
-  DMG_NAME="Freedirect.dmg"
+if [[ -z "${SIGNING_IDENTITY}" ]]; then
+  echo "SIGNING_IDENTITY is required because unsigned Safari web extensions cannot be distributed." >&2
+  exit 1
 fi
+SOURCE_VERSION="$(plutil -extract version raw "${ROOT_DIR}/Shared (Extension)/Resources/manifest.json")"
+if [[ -n "${VERSION}" && "${VERSION}" != "${SOURCE_VERSION}" ]]; then
+  echo "VERSION ${VERSION} does not match the extension manifest version ${SOURCE_VERSION}. Update project and manifest versions first." >&2
+  exit 1
+fi
+VERSION="${SOURCE_VERSION}"
+DMG_NAME="Freedirect-${VERSION}.dmg"
 DMG_PATH="${OUT_DIR}/${DMG_NAME}"
 
 mkdir -p "${OUT_DIR}"
@@ -45,61 +51,54 @@ fi
 
 xattr -cr "${APP_PATH}" || true
 
-if [[ -n "${SIGNING_IDENTITY}" ]]; then
-  echo "Signing app for distribution…"
+echo "Signing app for distribution…"
 
-  APP_ENTITLEMENTS="$(mktemp)"
-  EXT_ENTITLEMENTS="$(mktemp)"
-  cat > "${APP_ENTITLEMENTS}" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>com.apple.security.app-sandbox</key>
-  <true/>
-</dict>
-</plist>
-PLIST
-  cp "${APP_ENTITLEMENTS}" "${EXT_ENTITLEMENTS}"
+APP_ENTITLEMENTS="$(mktemp)"
+EXT_ENTITLEMENTS="$(mktemp)"
+trap 'rm -f "${APP_ENTITLEMENTS}" "${EXT_ENTITLEMENTS}"' EXIT
+cp "${ROOT_DIR}/macOS (App)/Freedirect.entitlements" "${APP_ENTITLEMENTS}"
+cp "${ROOT_DIR}/macOS (Extension)/Freedirect Extension.entitlements" "${EXT_ENTITLEMENTS}"
+plutil -replace com.apple.developer.ubiquity-kvstore-identifier -string "${TEAM_ID}.app.freedirect.Freedirect.Extension" "${APP_ENTITLEMENTS}"
+plutil -replace com.apple.developer.ubiquity-kvstore-identifier -string "${TEAM_ID}.app.freedirect.Freedirect.Extension" "${EXT_ENTITLEMENTS}"
 
-  sign_item() {
-    local item_path="$1"
-    local entitlements_path="${2:-}"
-    if [[ -n "${entitlements_path}" ]]; then
-      codesign --force --options runtime --timestamp \
-        --sign "${SIGNING_IDENTITY}" \
-        --entitlements "${entitlements_path}" \
-        "${item_path}"
-    else
-      codesign --force --options runtime --timestamp \
-        --sign "${SIGNING_IDENTITY}" \
-        "${item_path}"
+sign_item() {
+  local item_path="$1"
+  local entitlements_path="${2:-}"
+  if [[ -n "${entitlements_path}" ]]; then
+    codesign --force --options runtime --timestamp \
+      --sign "${SIGNING_IDENTITY}" \
+      --entitlements "${entitlements_path}" \
+      "${item_path}"
+  else
+    codesign --force --options runtime --timestamp \
+      --sign "${SIGNING_IDENTITY}" \
+      "${item_path}"
+  fi
+}
+
+if [[ -d "${APP_PATH}/Contents/PlugIns" ]]; then
+  while IFS= read -r -d '' appex; do
+    if [[ -d "${appex}/Contents/Frameworks" ]]; then
+      while IFS= read -r -d '' nested; do
+        sign_item "${nested}"
+      done < <(find "${appex}/Contents/Frameworks" -maxdepth 1 \( -name "*.framework" -o -name "*.dylib" \) -print0)
     fi
-  }
-
-  if [[ -d "${APP_PATH}/Contents/PlugIns" ]]; then
-    while IFS= read -r -d '' appex; do
-      if [[ -d "${appex}/Contents/Frameworks" ]]; then
-        while IFS= read -r -d '' nested; do
-          sign_item "${nested}"
-        done < <(find "${appex}/Contents/Frameworks" -maxdepth 1 \( -name "*.framework" -o -name "*.dylib" \) -print0)
-      fi
-      sign_item "${appex}" "${EXT_ENTITLEMENTS}"
-    done < <(find "${APP_PATH}/Contents/PlugIns" -maxdepth 1 -name "*.appex" -print0)
-  fi
-
-  if [[ -d "${APP_PATH}/Contents/Frameworks" ]]; then
-    while IFS= read -r -d '' framework; do
-      sign_item "${framework}"
-    done < <(find "${APP_PATH}/Contents/Frameworks" -maxdepth 1 \( -name "*.framework" -o -name "*.dylib" \) -print0)
-  fi
-
-  sign_item "${APP_PATH}" "${APP_ENTITLEMENTS}"
-  rm -f "${APP_ENTITLEMENTS}" "${EXT_ENTITLEMENTS}"
-
-  echo "Verifying code signature…"
-  codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
+    sign_item "${appex}" "${EXT_ENTITLEMENTS}"
+  done < <(find "${APP_PATH}/Contents/PlugIns" -maxdepth 1 -name "*.appex" -print0)
 fi
+
+if [[ -d "${APP_PATH}/Contents/Frameworks" ]]; then
+  while IFS= read -r -d '' framework; do
+    sign_item "${framework}"
+  done < <(find "${APP_PATH}/Contents/Frameworks" -maxdepth 1 \( -name "*.framework" -o -name "*.dylib" \) -print0)
+fi
+
+sign_item "${APP_PATH}" "${APP_ENTITLEMENTS}"
+rm -f "${APP_ENTITLEMENTS}" "${EXT_ENTITLEMENTS}"
+trap - EXIT
+
+echo "Verifying code signature…"
+codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
 
 STAGING_DIR="${OUT_DIR}/dmg-root"
 rm -rf "${STAGING_DIR}"
