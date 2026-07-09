@@ -48,7 +48,7 @@ Unsigned builds are not the intended path. Use Apple Development signing for loc
 Manual DMG build:
 
 ```sh
-SIGNING_IDENTITY="Developer ID Application: …" VERSION=0.1.0 scripts/build-dmg.sh
+SIGNING_IDENTITY="Developer ID Application: …" VERSION=0.1.1 scripts/build-dmg.sh
 ```
 
 `SIGNING_IDENTITY` is required. If `VERSION` is provided, it must match the extension manifest version.
@@ -61,6 +61,6 @@ build/homebrew/Freedirect-${VERSION}.dmg
 
 ## Version state
 
-- App/appex marketing version: `0.1.0`
-- App/appex build: `1`
-- Extension manifest version: `0.1.0`
+- App/appex marketing version: `0.1.1`
+- App/appex build: `2`
+- Extension manifest version: `0.1.1`

@@ -11,6 +11,8 @@ manifest = json.loads(Path('Shared (Extension)/Resources/manifest.json').read_te
 assert manifest['manifest_version'] == 3
 assert manifest['background'].get('service_worker') == 'background.js'
 assert 'declarativeNetRequestWithHostAccess' in manifest['permissions']
+assert 'declarative_net_request' not in manifest
+assert manifest['version'] == '0.1.1'
 assert '<all_urls>' in manifest['host_permissions']
 assert manifest['options_ui']['page'] == 'options.html'
 assert manifest['default_locale'] == 'en'
@@ -69,6 +71,8 @@ for name in ['Freedirect (iOS)', 'Freedirect (macOS)', 'Freedirect Extension (iO
 assert 'IPHONEOS_DEPLOYMENT_TARGET = 26.0;' in pbx
 assert 'MACOSX_DEPLOYMENT_TARGET = 26.0;' in pbx
 assert 'TARGETED_DEVICE_FAMILY = "1,2";' in pbx
+assert pbx.count('CURRENT_PROJECT_VERSION = 2;') == 8
+assert pbx.count('MARKETING_VERSION = 0.1.1;') == 8
 macos_app_info = Path('macOS (App)/Info.plist').read_text()
 assert '<key>LSApplicationCategoryType</key>' in macos_app_info
 assert '<string>public.app-category.utilities</string>' in macos_app_info
