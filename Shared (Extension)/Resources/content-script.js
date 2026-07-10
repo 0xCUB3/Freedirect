@@ -127,6 +127,20 @@ function startLinkRewriteObserver() {
   } catch {}
 }
 
+function resetRewrittenLinks() {
+  linkRewriteCache.clear()
+  for (const anchor of document.querySelectorAll('a[data-freedirect-checked]')) {
+    const original = anchor.dataset.freedirectChecked
+    delete anchor.dataset.freedirectChecked
+    if (original) anchor.href = original
+  }
+  startLinkRewriteObserver()
+}
+
+api.storage?.onChanged?.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.freedirectState) resetRewrittenLinks()
+})
+
 async function runFallbackRedirect() {
   if (window.top !== window) return
   if (!/^https?:$/.test(location.protocol)) return

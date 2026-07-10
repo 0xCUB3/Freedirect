@@ -7,6 +7,7 @@ function event(name) { return { addListener(callback) { listeners[name] = callba
 const localStorage = {}
 let dynamicRules = []
 let nativeMessageHandler = async () => ({ ok: true })
+const dynamicRuleFailures = new Map()
 const browser = {
   storage: {
     local: {
@@ -21,6 +22,13 @@ const browser = {
   declarativeNetRequest: {
     async getDynamicRules() { return dynamicRules },
     async updateDynamicRules({ removeRuleIds = [], addRules = [] }) {
+      for (const rule of addRules) {
+        const remainingFailures = dynamicRuleFailures.get(rule.id) ?? 0
+        if (remainingFailures > 0) {
+          dynamicRuleFailures.set(rule.id, remainingFailures - 1)
+          throw new Error(`transient replacement failure for ${rule.id}`)
+        }
+      }
       const removed = new Set(removeRuleIds)
       const retained = dynamicRules.filter(rule => !removed.has(rule.id))
       const retainedIds = new Set(retained.map(rule => rule.id))
@@ -157,6 +165,75 @@ await vm.runInContext('rebuildRulesNow()', context)
 const secondSafariRules = dynamicRules.map(rule => rule.id)
 if (!firstSafariRules.length || firstSafariRules.join(',') !== secondSafariRules.join(',')) {
   errors.push('Safari rebuild did not preserve the generated dynamic rule set')
+}
+
+localStorage.freedirectState = vm.runInContext('defaultState()', context)
+localStorage.freedirectState.services.reddit.instance = 'https://redlib.net'
+await vm.runInContext('rebuildRulesNow()', context)
+const staleRedditRule = dynamicRules.find(rule => rule.action?.redirect?.regexSubstitution?.startsWith('https://redlib.net'))
+if (!staleRedditRule) {
+  errors.push('could not seed a redlib.net rule for Safari retry validation')
+} else {
+  localStorage.freedirectState.services.reddit.instance = 'https://safereddit.com'
+  dynamicRuleFailures.set(staleRedditRule.id, 1)
+  await vm.runInContext('rebuildRulesNow()', context)
+  const replacedRedditRule = dynamicRules.find(rule => rule.id === staleRedditRule.id)
+  if (!replacedRedditRule?.action?.redirect?.regexSubstitution?.startsWith('https://safereddit.com')) {
+    errors.push('Safari retry preserved a stale Reddit instance after a transient replacement failure')
+  }
+}
+
+localStorage.freedirectState = vm.runInContext('defaultState()', context)
+localStorage.freedirectState.services.reddit.enabled = false
+localStorage.freedirectState.services.reddit.instance = 'https://safereddit.com'
+await new Promise((resolve, reject) => {
+  listeners['runtime.onMessage'](
+    { type: 'updateService', serviceId: 'reddit', patch: { enabled: true } },
+    {},
+    response => response?.error ? reject(new Error(response.error)) : resolve(response)
+  )
+})
+if (localStorage.freedirectState.services.reddit.instance !== 'https://safereddit.com') {
+  errors.push('enabling Reddit replaced the configured instance')
+}
+
+let contentStorageListener = null
+const rewrittenAnchor = {
+  href: 'https://redlib.net/r/privacy',
+  dataset: { freedirectChecked: 'https://www.reddit.com/r/privacy' },
+  rel: '',
+  removeAttribute() {}
+}
+const contentWindow = {}
+contentWindow.top = contentWindow
+const contentContext = vm.createContext({
+  browser: {
+    runtime: {},
+    storage: { onChanged: { addListener(listener) { contentStorageListener = listener } } }
+  },
+  window: contentWindow,
+  document: {
+    documentElement: {},
+    readyState: 'complete',
+    title: '',
+    body: { innerText: '' },
+    querySelectorAll() { return [rewrittenAnchor] },
+    addEventListener() {}
+  },
+  location: { href: 'https://example.com/', protocol: 'https:', replace() {} },
+  history: { length: 1, back() {} },
+  MutationObserver: class {
+    observe() {}
+    disconnect() {}
+  },
+  URL,
+  setTimeout() { return 1 },
+  clearTimeout() {}
+})
+vm.runInContext(readFileSync('Shared (Extension)/Resources/content-script.js', 'utf8'), contentContext, { filename: 'content-script.js' })
+contentStorageListener?.({ freedirectState: { newValue: {} } }, 'local')
+if (rewrittenAnchor.href !== 'https://www.reddit.com/r/privacy' || 'freedirectChecked' in rewrittenAnchor.dataset) {
+  errors.push('state change did not invalidate a rewritten Reddit link')
 }
 
 const selectedInstancePreserved = vm.runInContext(`(() => {

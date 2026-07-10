@@ -215,7 +215,7 @@ const api = globalThis.chrome ?? globalThis.browser
     updateCurrentService(serviceId, data.state.services[serviceId])
     return data.state.services[serviceId]
   }
-  async function checkServiceOrBest(serviceId, { selectBestWhenUnchecked = false } = {}) {
+  async function checkServiceOrBest(serviceId) {
     const config = current?.state?.services?.[serviceId]
     if (!config?.enabled) return
     const service = current.catalog[serviceId]
@@ -224,25 +224,13 @@ const api = globalThis.chrome ?? globalThis.browser
       setRowHealthText(serviceId, t('notApplicable'), 'na')
       return
     }
-    const existingHealth = config.health?.[config.instance]
-    if (selectBestWhenUnchecked && !existingHealth) {
-      setRowHealthText(serviceId, 'finding best…', 'warn')
+    setRowHealthText(serviceId, 'checking…')
+    await nextPaint()
+    const health = await msg('checkInstanceHealth', { serviceId, instance: config.instance }).then(result => result.health, () => ({ ok: false }))
+    if (!health?.ok && current?.state?.farsideFallbackEnabled) {
+      setRowHealthText(serviceId, 'checking fallback…', 'warn')
       await nextPaint()
-      await msg('selectBestInstance', { serviceId }).catch(() => null)
-    } else {
-      setRowHealthText(serviceId, 'checking…')
-      await nextPaint()
-      const health = await msg('checkInstanceHealth', { serviceId, instance: config.instance }).then(result => result.health, () => ({ ok: false }))
-      if (!health?.ok && current?.state?.farsideFallbackEnabled) {
-        setRowHealthText(serviceId, 'checking fallback…', 'warn')
-        await nextPaint()
-        await msg('checkInstanceHealth', { serviceId, instance: current.state.farsideBaseUrl || current.farside?.baseUrl || 'https://farside.link' }).catch(() => null)
-      }
-      if (!health?.ok && selectBestWhenUnchecked) {
-        setRowHealthText(serviceId, 'finding best…', 'warn')
-        await nextPaint()
-        await msg('selectBestInstance', { serviceId }).catch(() => null)
-      }
+      await msg('checkInstanceHealth', { serviceId, instance: current.state.farsideBaseUrl || current.farside?.baseUrl || 'https://farside.link' }).catch(() => null)
     }
     const nextConfig = await refreshServiceState(serviceId).catch(() => null)
     const activeConfig = nextConfig || current?.state?.services?.[serviceId]
@@ -331,7 +319,7 @@ const api = globalThis.chrome ?? globalThis.browser
     try {
       await msg('updateService', { serviceId, patch })
       await refresh()
-      if ((field === 'instance' || field === 'frontend' || field === 'enabled') && current.state.services[serviceId]?.enabled) await checkServiceOrBest(serviceId, { selectBestWhenUnchecked: field === 'enabled' && event.target.checked })
+      if ((field === 'instance' || field === 'frontend' || field === 'enabled') && current.state.services[serviceId]?.enabled) await checkServiceOrBest(serviceId)
     } catch (error) {
       await refresh()
       alert(error?.message || String(error))

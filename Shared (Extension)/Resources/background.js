@@ -569,9 +569,15 @@ function sanitizeServiceUpdate(serviceId, currentConfig, patch) {
   const favoriteInstances = input.favoriteInstances === undefined
     ? sanitizeStringArray(currentConfig.favoriteInstances, normalizeInstanceOrigin)
     : sanitizeStringArray(input.favoriteInstances, normalizeInstanceOrigin)
-  const allowedInstances = new Set([...customInstances, ...favoriteInstances, ...frontends[frontend].instances])
   const currentInstance = normalizeConfiguredInstance(serviceId, frontend, currentConfig.instance) || normalizeInstanceOrigin(currentConfig.instance)
   const requestedInstance = input.instance === undefined ? currentInstance : (normalizeConfiguredInstance(serviceId, frontend, input.instance) || normalizeInstanceOrigin(input.instance))
+  const allowedInstances = new Set([
+    ...customInstances,
+    ...favoriteInstances,
+    ...frontends[frontend].instances,
+    ...(currentInstance ? [currentInstance] : []),
+    ...(requestedInstance ? [requestedInstance] : [])
+  ])
   const defaultInstance = frontends[frontend].instances[0]
   return {
     enabled: input.enabled === undefined ? Boolean(currentConfig.enabled) : Boolean(input.enabled),
@@ -1177,49 +1183,51 @@ async function rebuildRulesNow() {
     // Stale-rule sweep covers our allocation range (1000-5999) to evict rules
     // from previous builds that Safari can't enumerate via getDynamicRules.
     // IDs installed in Phase 1 must be excluded from Phase 2's removal set.
-    const newIds = new Set(addRules.map(rule => rule.id))
-    const staleRuleIds = []
-    for (let id = 1000; id <= 5999; id++) if (!newIds.has(id)) staleRuleIds.push(id)
-    const clearAllRuleIds = Array.from(new Set([
-      ...removeRuleIds.filter(id => !newIds.has(id)),
-      ...staleRuleIds
-    ]))
-    const installOnSafari = async () => {
-      // Phase 1: atomically replace new rules one-by-one (Safari rejects large
-      // batches). Unrelated old rules remain active throughout.
-      diagnostics.lastError = null
-      diagnostics.lastRuleCount = 0
-      for (const rule of addRules) {
+    const installedIds = new Set()
+    let pendingRules = addRules.map(rule => ({ rule, error: null }))
+    const safariDelays = [0, 800, 2000]
+    diagnostics.lastError = null
+    for (let attempt = 0; attempt < safariDelays.length && pendingRules.length; attempt++) {
+      if (safariDelays[attempt]) await new Promise(r => setTimeout(r, safariDelays[attempt]))
+      const failedRules = []
+      for (const pending of pendingRules) {
         try {
-          await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: [rule.id], addRules: [rule] })
-          diagnostics.lastRuleCount += 1
+          await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: [pending.rule.id], addRules: [pending.rule] })
+          installedIds.add(pending.rule.id)
         } catch (ruleError) {
-          rejectedRules.push({ id: rule.id, reason: String(ruleError?.message ?? ruleError) })
+          failedRules.push({ rule: pending.rule, error: String(ruleError?.message ?? ruleError) })
         }
       }
-      // Phase 2: clear stale rules. New rules are already installed, so the
-      // brief remove-call leaves the active rule set intact.
+      pendingRules = failedRules
+    }
+    diagnostics.lastRuleCount = installedIds.size
+    for (const pending of pendingRules) rejectedRules.push({ id: pending.rule.id, reason: pending.error })
+
+    // A replacement that failed must not leave the old rule with that ID
+    // active. Otherwise a previous instance remains authoritative for only
+    // some URL patterns, which makes the stale redirect appear intermittent.
+    const failedRuleIds = pendingRules.map(pending => pending.rule.id)
+    if (failedRuleIds.length) {
       try {
-        await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: clearAllRuleIds, addRules: [] })
+        await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: failedRuleIds, addRules: [] })
       } catch (clearError) {
-        // Clear failure is non-fatal: stale rules just sit unused; the new
-        // rules are already live. Surface it for diagnostics only.
-        if (!diagnostics.lastError) diagnostics.lastError = String(clearError?.message ?? clearError)
+        diagnostics.lastError = String(clearError?.message ?? clearError)
       }
     }
-    const safariDelays = [0, 800, 2000]
-    let safariError = null
-    for (let attempt = 0; attempt < safariDelays.length; attempt++) {
-      if (safariDelays[attempt]) await new Promise(r => setTimeout(r, safariDelays[attempt]))
-      try {
-        await installOnSafari()
-        safariError = null
-        break
-      } catch (error) {
-        safariError = String(error?.message ?? error)
-      }
+
+    // Phase 2: clear every allocation-range rule that was not successfully
+    // installed above, including replacements that exhausted their retries.
+    const staleRuleIds = []
+    for (let id = 1000; id <= 5999; id++) if (!installedIds.has(id)) staleRuleIds.push(id)
+    const clearAllRuleIds = Array.from(new Set([
+      ...removeRuleIds.filter(id => !installedIds.has(id)),
+      ...staleRuleIds
+    ]))
+    try {
+      await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: clearAllRuleIds, addRules: [] })
+    } catch (clearError) {
+      if (!diagnostics.lastError) diagnostics.lastError = String(clearError?.message ?? clearError)
     }
-    if (safariError && diagnostics.lastRuleCount === 0) diagnostics.lastError = safariError
   }
   diagnostics.lastRejectedRules = rejectedRules.map(rejected => ({
     id: rejected.id,
@@ -2178,24 +2186,18 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { farsideFallbackEnabled }
       }
       case 'updateService': {
-        let wasEnabled = false
         let updatedInstance = null
         const wantsEnabled = message.patch?.enabled === true
         await withStateWrite(latest => {
           const service = latest.services[message.serviceId]
           if (!service) throw new Error('Unknown service')
-          wasEnabled = Boolean(service.enabled)
           latest.services[message.serviceId] = sanitizeServiceUpdate(message.serviceId, service, message.patch)
           updatedInstance = latest.services[message.serviceId].instance
         })
-        if (wantsEnabled) {
-          if (!wasEnabled) {
-            try { await selectBestInstance(message.serviceId) } catch { await checkInstanceHealth(message.serviceId, updatedInstance).catch(() => null) }
-          } else {
-            const health = await checkInstanceHealth(message.serviceId, updatedInstance).catch(() => ({ ok: false }))
-            if (!health?.ok) await selectBestInstance(message.serviceId).catch(() => null)
-          }
-        }
+        // Enabling a service may check the configured instance, but must not
+        // silently replace it. Selecting the fastest instance is reserved for
+        // the explicit "Best" action.
+        if (wantsEnabled) await checkInstanceHealth(message.serviceId, updatedInstance).catch(() => null)
         const diagnostics = await rebuildRules()
         await updateCurrentActionIcon()
         return { diagnostics }
