@@ -149,9 +149,9 @@ async function runFallbackRedirect() {
     const target = response?.diagnosis?.redirectUrl
     if (!target || target === CURRENT_URL || location.href !== CURRENT_URL) return
     const targetUrl = new URL(target)
-    if (!/^(https?|freetube|materialious):$/.test(targetUrl.protocol)) return
+    if (!/^(https?|freetube|materialious|yattee):$/.test(targetUrl.protocol)) return
     location.replace(targetUrl.href)
-    if (/^(freetube|materialious):$/.test(targetUrl.protocol)) {
+    if (/^(freetube|materialious|yattee):$/.test(targetUrl.protocol)) {
       setTimeout(() => {
         if (history.length > 1) history.back()
       }, 900)

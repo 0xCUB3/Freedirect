@@ -156,6 +156,12 @@ const SERVICE_CATALOG = {
         { source: '^https?://youtu\\.be/([^?&#/]+)(.*)', path: 'watch/$1' },
         { source: '^https?://(www\\.|m\\.)?youtube\\.com/shorts/([^?&#/]+)(.*)', path: 'watch/$2' },
         { source: '^https?://(www\\.)?youtube-nocookie\\.com/embed/([^?&#/]+)(.*)', path: 'watch/$2' }
+      ] },
+      yattee: { name: 'Yattee', instances: ['yattee://'], appProtocol: true, rules: [
+        { source: '^https?://(www\\.|m\\.)?youtube\\.com/watch\\?v=([^?&#/]+)(.*)', path: 'https://www.youtube.com/watch?v=$2$3' },
+        { source: '^https?://youtu\\.be/([^?&#/]+)(.*)', path: 'https://youtu.be/$1$2' },
+        { source: '^https?://(www\\.|m\\.)?youtube\\.com/(.*)', path: 'https://www.youtube.com/$2' },
+        { source: '^https?://(www\\.)?youtube-nocookie\\.com/embed/([^?&#/]+)(.*)', path: 'https://www.youtube.com/embed/$2$3' }
       ] }
     },
     rules: [
@@ -1794,7 +1800,7 @@ async function finishAppProtocolRedirect(tabId, previousUrl) {
 }
 
 function isAppProtocolRedirect(url) {
-  return /^(freetube|materialious):\/\//i.test(String(url || ''))
+  return /^(freetube|materialious|yattee):\/\//i.test(String(url || ''))
 }
 
 async function openRedirectInTab(tabId, redirected, previousUrl = null) {
