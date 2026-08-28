@@ -77,6 +77,34 @@ if (ids.length !== 51) errors.push(`expected 51 service groups, got ${ids.length
 const highCount = Object.values(catalog).filter(service => service.confidence === 'high').length
 if (highCount !== 11) errors.push(`expected 11 high-confidence groups, got ${highCount}`)
 
+const imginn = catalog.instagram?.frontends?.imginn
+if (imginn?.name !== 'Imginn' || imginn.instances?.length !== 1 || imginn.instances[0] !== 'https://imginn.com') {
+  errors.push('instagram/imginn: expected Imginn with instance https://imginn.com')
+}
+if (catalog.instagram?.defaultFrontend !== 'imginn') errors.push('instagram: default frontend must be imginn')
+
+const defaultInstagramRedirect = vm.runInContext("applyTemplateRedirect('https://www.instagram.com/brunomars', defaultState())", context)
+if (defaultInstagramRedirect !== 'https://imginn.com/brunomars') {
+  errors.push(`instagram/imginn: default state redirected to ${defaultInstagramRedirect}, expected https://imginn.com/brunomars`)
+}
+
+const imginnRedirectCases = [
+  ['https://www.instagram.com/brunomars', 'https://imginn.com/brunomars'],
+  ['https://instagram.com/brunomars', 'https://imginn.com/brunomars'],
+  ['https://www.instagram.com/p/example/', 'https://imginn.com/p/example/']
+]
+for (const [source, expected] of imginnRedirectCases) {
+  const redirect = vm.runInContext(`(() => {
+    const state = defaultState()
+    state.globalEnabled = true
+    state.services.instagram.enabled = true
+    state.services.instagram.frontend = 'imginn'
+    state.services.instagram.instance = 'https://imginn.com'
+    return applyTemplateRedirect(${JSON.stringify(source)}, state)
+  })()`, context)
+  if (redirect !== expected) errors.push(`instagram/imginn: ${source} redirected to ${redirect}, expected ${expected}`)
+}
+
 function validateRule(serviceId, label, rule, { requireSlash = false } = {}) {
   try { new RegExp(rule.source) } catch (error) { errors.push(`${serviceId} ${label}: invalid regex ${error.message}`) }
   if (typeof rule.path !== 'string' || !rule.path) errors.push(`${serviceId} ${label}: invalid path ${rule.path}`)

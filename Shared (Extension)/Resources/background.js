@@ -213,9 +213,10 @@ const SERVICE_CATALOG = {
     name: 'Instagram',
     confidence: 'high',
     originalHosts: ['instagram.com', 'www.instagram.com'],
-    defaultFrontend: 'kittygram',
+    defaultFrontend: 'imginn',
     frontends: {
       kittygram: { name: 'kittygram', instances: ['https://kittygr.am', 'https://kittygram.irelephant.net', 'https://kittygram.kareem.one', 'https://kg.meowing.de'] },
+      imginn: { name: 'Imginn', instances: ['https://imginn.com'] },
       proxigram: { name: 'Proxigram', instances: ['https://ig.opnxng.com', 'https://proxigram.lunar.icu', 'https://gram.whatever.social', 'https://ig.snine.nl', 'https://proxigram.privacyredirect.com'] }
     },
     rules: [{ source: '^https?://(www\\.)?instagram\\.com/(.*)', path: '/$2' }]

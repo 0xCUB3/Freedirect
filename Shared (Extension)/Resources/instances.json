@@ -144,6 +144,11 @@
       "https://inv.nadeko.ygg"
     ]
   },
+  "imginn": {
+    "clearnet": [
+      "https://imginn.com"
+    ]
+  },
   "jitsi": {
     "clearnet": [
       "https://meet.jit.si",

@@ -30,7 +30,7 @@ DEFAULT_EXPECTED_HOSTS = {
     "youtube": "inv.thepixora.com",
     "reddit": "redlib.net",
     "twitter": "nitter.net",
-    "instagram": "kittygr.am",
+    "instagram": "imginn.com",
     "search": "search.sapti.me",
 }
 
