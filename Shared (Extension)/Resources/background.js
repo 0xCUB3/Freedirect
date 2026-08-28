@@ -4,6 +4,7 @@ const api = globalThis.chrome ?? globalThis.browser
 const RULE_ID_BASE = 1000
 const SESSION_RULE_ID_BASE = 900000
 const MAX_RULES = 5000
+const DNR_REMOVE_CHUNK_SIZE = 400
 const HEALTH_TIMEOUT_MS = 6000
 const BEST_INSTANCE_HEALTH_TIMEOUT_MS = 2500
 const BEST_INSTANCE_CONCURRENCY = 8
@@ -63,6 +64,7 @@ const SYNC_POLL_INTERVAL_MIN = 5
 let syncPushTimer = null
 let suppressLocalDirty = false
 let syncMetaCache = null
+let syncOperationQueue = Promise.resolve()
 let stateWriteQueue = Promise.resolve()
 let ruleRebuildQueue = Promise.resolve()
 const tabLastGoodUrls = new Map()
@@ -686,7 +688,6 @@ function stateHash(state) {
 
 function payloadHash(payload) {
   if (!payload || typeof payload !== 'object') return null
-  if (typeof payload.contentHash === 'string' && payload.contentHash) return payload.contentHash
   if (!payload.state || typeof payload.state !== 'object') return null
   return stateHash(migrateState(payload.state))
 }
@@ -727,6 +728,12 @@ function scheduleSyncPush() {
   }, SYNC_PUSH_DEBOUNCE_MS)
 }
 
+function withSyncOperation(operation) {
+  const run = syncOperationQueue.catch(() => null).then(operation)
+  syncOperationQueue = run.then(() => null, () => null)
+  return run
+}
+
 async function markLocalDirty() {
   if (suppressLocalDirty) return
   const meta = await getSyncMeta()
@@ -735,7 +742,7 @@ async function markLocalDirty() {
   scheduleSyncPush()
 }
 
-async function syncPush({ force = false } = {}) {
+async function syncPushUnlocked({ force = false } = {}) {
   const meta = await getSyncMeta()
   if (!meta.syncEnabled) return { ok: false, reason: 'disabled' }
   if (meta.pendingConflict) return { ok: false, reason: 'pending conflict' }
@@ -779,7 +786,11 @@ async function syncPush({ force = false } = {}) {
   return { ok: true, pending: changedWhilePushing, cloudUpdatedAt: res.cloudUpdatedAt || updatedAt }
 }
 
-async function syncPull({ manual = false } = {}) {
+function syncPush(options) {
+  return withSyncOperation(() => syncPushUnlocked(options))
+}
+
+async function syncPullUnlocked({ manual = false } = {}) {
   const initialMeta = await getSyncMeta()
   if (!initialMeta.syncEnabled && !manual) return { ok: false, reason: 'disabled' }
   if (initialMeta.pendingConflict) return { ok: false, reason: 'pending conflict' }
@@ -801,7 +812,7 @@ async function syncPull({ manual = false } = {}) {
   const emptyCloud = !cloudUpdatedAt || payload == null
   if (emptyCloud) {
     await saveSyncMeta({ ...meta, localHash, cloudUpdatedAt: null, cloudOrigin: null, cloudHash: null })
-    if (meta.localDirtyAt || manual) return await syncPush({ force: true })
+    if (meta.localDirtyAt || manual) return await syncPushUnlocked({ force: true })
     await saveSyncMeta({ ...meta, localHash, cloudUpdatedAt: null, cloudOrigin: null, cloudHash: null, lastSyncAt: new Date().toISOString(), lastSyncError: null })
     return { ok: true, reason: 'empty-cloud' }
   }
@@ -814,7 +825,7 @@ async function syncPull({ manual = false } = {}) {
     return { ok: true, reason: 'same-content' }
   }
   if (!manual && meta.cloudUpdatedAt === cloudUpdatedAt && (!cloudHash || meta.cloudHash === cloudHash)) {
-    if (meta.localDirtyAt) return await syncPush()
+    if (meta.localDirtyAt) return await syncPushUnlocked()
     await saveSyncMeta({ ...meta, localHash, cloudUpdatedAt, cloudOrigin, cloudHash, lastSyncAt: new Date().toISOString(), lastSyncError: null })
     return { ok: true, reason: 'unchanged' }
   }
@@ -866,6 +877,10 @@ async function syncPull({ manual = false } = {}) {
   return { ok: true, reason: 'imported' }
 }
 
+function syncPull(options) {
+  return withSyncOperation(() => syncPullUnlocked(options))
+}
+
 async function getSyncStatus() {
   const meta = await getSyncMeta()
   const status = await sendNativeMessage({ type: 'syncStatus' })
@@ -885,7 +900,7 @@ async function getSyncStatus() {
   }
 }
 
-async function setSyncEnabled(enabled) {
+async function setSyncEnabledUnlocked(enabled) {
   const meta = await getSyncMeta()
   const syncEnabled = Boolean(enabled)
   if (!syncEnabled) {
@@ -895,58 +910,80 @@ async function setSyncEnabled(enabled) {
   const { hash: localHash } = await currentStateSnapshot()
   await saveSyncMeta({ ...meta, syncEnabled: true, localHash, pendingConflict: null, lastSyncError: null })
   const res = await sendNativeMessage({ type: 'syncGet' })
+  const latestMeta = await getSyncMeta()
+  const latestSnapshot = await currentStateSnapshot()
   if (!res?.ok) {
-    await saveSyncMeta({ ...meta, syncEnabled: true, localHash, pendingConflict: null, lastSyncError: sanitizeSyncError(res?.reason || res?.error || 'syncGet failed') })
+    await saveSyncMeta({ ...latestMeta, syncEnabled: true, localHash: latestSnapshot.hash, pendingConflict: null, lastSyncError: sanitizeSyncError(res?.reason || res?.error || 'syncGet failed') })
     return { ok: false, reason: 'syncGet failed' }
   }
   if (res.available === false) {
-    await saveSyncMeta({ ...meta, syncEnabled: true, localHash, pendingConflict: null, lastSyncError: 'iCloud unavailable' })
+    await saveSyncMeta({ ...latestMeta, syncEnabled: true, localHash: latestSnapshot.hash, pendingConflict: null, lastSyncError: 'iCloud unavailable' })
     return { ok: false, reason: 'unavailable' }
   }
   const cloudUpdatedAt = res.cloudUpdatedAt || null
   const cloudOrigin = res.cloudOrigin || null
   const cloudHash = payloadHash(res.payload)
   const emptyCloud = !cloudUpdatedAt || res.payload == null
-  if (emptyCloud) return await syncPush({ force: true })
-  if (cloudHash && cloudHash === localHash) {
-    await saveSyncMeta({ ...meta, syncEnabled: true, localDirtyAt: null, localHash, cloudUpdatedAt, cloudOrigin, cloudHash, pendingConflict: null, lastSyncAt: new Date().toISOString(), lastSyncError: null })
+  if (emptyCloud) return await syncPushUnlocked({ force: true })
+  if (cloudHash && cloudHash === latestSnapshot.hash) {
+    await saveSyncMeta({ ...latestMeta, syncEnabled: true, localDirtyAt: null, localHash: latestSnapshot.hash, cloudUpdatedAt, cloudOrigin, cloudHash, pendingConflict: null, lastSyncAt: new Date().toISOString(), lastSyncError: null })
     return { ok: true, reason: 'same-content' }
   }
   await saveSyncMeta({
-    ...meta, syncEnabled: true, localDirtyAt: null, localHash,
+    ...latestMeta, syncEnabled: true, localHash: latestSnapshot.hash,
     cloudUpdatedAt, cloudOrigin, cloudHash,
-    pendingConflict: { cloudUpdatedAt, cloudOrigin, cloudHash, localHash },
+    pendingConflict: { cloudUpdatedAt, cloudOrigin, cloudHash, localHash: latestSnapshot.hash },
     lastSyncError: null
   })
   return { ok: true, pending: true }
 }
 
+function setSyncEnabled(enabled) {
+  return withSyncOperation(() => setSyncEnabledUnlocked(enabled))
+}
+
 // Resolve a pending sync conflict in the chosen direction. 'local' pushes this
 // device's state to the cloud; 'cloud' imports the cloud copy, replacing local.
 // Either way clears `pendingConflict` so steady-state sync resumes.
-async function syncResolve(direction) {
+async function syncResolveUnlocked(direction) {
   const meta = await getSyncMeta()
   if (!meta.pendingConflict) throw new Error('No pending sync conflict')
-  await saveSyncMeta({ ...meta, pendingConflict: null })
-  if (direction === 'local') return await syncPush({ force: true })
+  if (direction !== 'local' && direction !== 'cloud') throw new Error(`Unknown direction: ${direction}`)
+  if (direction === 'local') {
+    await saveSyncMeta({ ...meta, pendingConflict: null })
+    try {
+      const result = await syncPushUnlocked({ force: true })
+      if (result.ok) return result
+      const latestMeta = await getSyncMeta()
+      await saveSyncMeta({ ...latestMeta, pendingConflict: meta.pendingConflict })
+      return result
+    } catch (error) {
+      const latestMeta = await getSyncMeta()
+      await saveSyncMeta({ ...latestMeta, pendingConflict: meta.pendingConflict })
+      throw error
+    }
+  }
   if (direction === 'cloud') {
     const res = await sendNativeMessage({ type: 'syncGet' })
     if (!res?.ok) throw new Error(res?.error || 'syncGet failed')
     const payload = res.payload
     if (!payload || typeof payload !== 'object' || !payload.state) throw new Error('invalid cloud payload')
     const cloudHash = payloadHash(payload)
-    let imported
+    const imported = migrateState(payload.state)
     suppressLocalDirty = true
     try {
-      imported = migrateState(payload.state)
-      await storageSet({ freedirectState: imported })
-      await rebuildRules()
+      await withStateWrite(latest => {
+        for (const key of Object.keys(latest)) delete latest[key]
+        Object.assign(latest, imported)
+      })
     } finally {
       suppressLocalDirty = false
     }
+    await rebuildRules()
     const importedHash = stateHash(imported)
+    const latestMeta = await getSyncMeta()
     await saveSyncMeta({
-      ...meta, pendingConflict: null, localDirtyAt: null, localHash: importedHash,
+      ...latestMeta, pendingConflict: null, localDirtyAt: null, localHash: importedHash,
       cloudUpdatedAt: res.cloudUpdatedAt || null,
       cloudOrigin: res.cloudOrigin || null,
       cloudHash: cloudHash || importedHash,
@@ -954,14 +991,23 @@ async function syncResolve(direction) {
     })
     return { ok: true, reason: 'imported' }
   }
-  throw new Error(`Unknown direction: ${direction}`)
 }
 
-async function removeSyncCloud() {
+function syncResolve(direction) {
+  return withSyncOperation(() => syncResolveUnlocked(direction))
+}
+
+async function removeSyncCloudUnlocked() {
   const res = await sendNativeMessage({ type: 'syncRemove' })
+  if (!res?.ok) throw new Error(sanitizeSyncError(res?.error || res?.reason || 'syncRemove failed'))
+  if (res.removed === false) throw new Error('iCloud has not accepted the removal yet')
   const meta = await getSyncMeta()
   await saveSyncMeta({ ...meta, cloudUpdatedAt: null, cloudOrigin: null, cloudHash: null, localDirtyAt: null, pendingConflict: null, lastSyncAt: new Date().toISOString(), lastSyncError: null })
-  return { ok: Boolean(res?.ok), removed: Boolean(res?.removed), available: Boolean(res?.available) }
+  return { ok: true, removed: true, available: Boolean(res?.available) }
+}
+
+function removeSyncCloud() {
+  return withSyncOperation(removeSyncCloudUnlocked)
 }
 
 
@@ -1132,6 +1178,23 @@ function rebuildRules() {
   return run
 }
 
+async function removeDynamicRulesInChunks(ruleIds) {
+  const unique = Array.from(new Set(ruleIds.filter(id => Number.isFinite(id))))
+  if (!unique.length || !api.declarativeNetRequest?.updateDynamicRules) return
+  for (let offset = 0; offset < unique.length; offset += DNR_REMOVE_CHUNK_SIZE) {
+    const chunk = unique.slice(offset, offset + DNR_REMOVE_CHUNK_SIZE)
+    try {
+      await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: chunk, addRules: [] })
+    } catch {
+      for (const id of chunk) {
+        try {
+          await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: [id], addRules: [] })
+        } catch {}
+      }
+    }
+  }
+}
+
 async function rebuildRulesNow() {
   const state = await getState()
   const existing = await callApi(api.declarativeNetRequest, 'getDynamicRules')
@@ -1230,9 +1293,20 @@ async function rebuildRulesNow() {
       ...staleRuleIds
     ]))
     try {
-      await callApi(api.declarativeNetRequest, 'updateDynamicRules', { removeRuleIds: clearAllRuleIds, addRules: [] })
+      await removeDynamicRulesInChunks(clearAllRuleIds)
     } catch (clearError) {
       if (!diagnostics.lastError) diagnostics.lastError = String(clearError?.message ?? clearError)
+    }
+    if (!addRules.length) {
+      const remaining = await callApi(api.declarativeNetRequest, 'getDynamicRules')
+      const leftoverIds = remaining.map(rule => rule.id).filter(id => !installedIds.has(id))
+      if (leftoverIds.length) {
+        try {
+          await removeDynamicRulesInChunks(leftoverIds)
+        } catch (clearError) {
+          if (!diagnostics.lastError) diagnostics.lastError = String(clearError?.message ?? clearError)
+        }
+      }
     }
   }
   diagnostics.lastRejectedRules = rejectedRules.map(rejected => ({
@@ -1251,12 +1325,22 @@ async function rebuildRulesNow() {
 
 function serviceForOriginal(url) {
   const host = url.hostname.replace(/^www\./, '')
+  let best = null
+  let bestScore = -1
   for (const [id, service] of Object.entries(SERVICE_CATALOG)) {
-    if (service.originalHosts.some(candidate => host === candidate.replace(/^www\./, '') || host.endsWith('.' + candidate.replace(/^www\./, '')))) {
-      return [id, service]
+    for (const candidate of service.originalHosts) {
+      const normalized = candidate.replace(/^www\./, '')
+      let score = -1
+      if (host === normalized) score = 10000 + normalized.length
+      else if (host.endsWith('.' + normalized)) score = normalized.length
+      else continue
+      if (score > bestScore) {
+        bestScore = score
+        best = [id, service]
+      }
     }
   }
-  return null
+  return best
 }
 
 function applyTemplateRedirect(urlString, state) {
@@ -1294,14 +1378,52 @@ function redirectForServiceUrl(serviceId, service, config, url, state, { forceFa
 function diagnoseUrl(urlString, state) {
   let url
   try { url = new URL(urlString) } catch { return { url: null, serviceId: null, serviceName: null, frontendName: null, instance: null, routing: null, redirectUrl: null, reverseUrl: null, reason: 'invalid-url' } }
-  const reversed = reverseUrl(urlString, state)
-  if (isBypassedUrl(url.href, state)) return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, routing: null, redirectUrl: null, reverseUrl: reversed, reason: 'bypassed' }
-  if (!state.globalEnabled) return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, routing: null, redirectUrl: null, reverseUrl: reversed, reason: 'disabled' }
-  for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
+  const frontend = lookupKnownFrontend(urlString, state)
+  const reversed = frontend?.originalUrl ?? null
+  const originalMatch = serviceForOriginal(url)
+
+  if (originalMatch) {
+    const [serviceId, service] = originalMatch
+    if (isBypassedUrl(url.href, state)) {
+      return { url: url.href, serviceId, serviceName: service.name, frontendName: null, instance: null, routing: null, redirectUrl: null, reverseUrl: reversed, reason: 'bypassed' }
+    }
+    if (!state.globalEnabled) {
+      return { url: url.href, serviceId, serviceName: service.name, frontendName: null, instance: null, routing: null, redirectUrl: null, reverseUrl: reversed, reason: 'disabled' }
+    }
     const result = redirectForServiceUrl(serviceId, service, state.services[serviceId], url, state)
     if (result) return { ...result, reverseUrl: reversed }
+    return { url: url.href, serviceId, serviceName: service.name, frontendName: null, instance: null, routing: null, redirectUrl: null, reverseUrl: reversed, reason: 'no-match' }
   }
-  return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, routing: null, redirectUrl: null, reverseUrl: reversed, reason: reversed ? 'frontend' : 'no-match' }
+
+  if (frontend?.originalUrl) {
+    const freedirectMatch = freedirectWouldSendToFrontend(frontend.originalUrl, url.href, state)
+    if (freedirectMatch) {
+      return {
+        url: url.href,
+        serviceId: freedirectMatch.serviceId,
+        serviceName: freedirectMatch.serviceName,
+        frontendName: freedirectMatch.frontendName,
+        instance: freedirectMatch.instance,
+        routing: freedirectMatch.routing,
+        redirectUrl: null,
+        reverseUrl: frontend.originalUrl,
+        reason: 'frontend'
+      }
+    }
+    return {
+      url: url.href,
+      serviceId: frontend.serviceId,
+      serviceName: frontend.serviceName,
+      frontendName: frontend.frontendName,
+      instance: null,
+      routing: null,
+      redirectUrl: null,
+      reverseUrl: frontend.originalUrl,
+      reason: 'external-redirect'
+    }
+  }
+
+  return { url: url.href, serviceId: null, serviceName: null, frontendName: null, instance: null, routing: null, redirectUrl: null, reverseUrl: null, reason: 'no-match' }
 }
 
 function originalUrlForServicePath(serviceId, pathname, search, hash) {
@@ -1340,26 +1462,70 @@ function reverseFarsideUrl(url, state) {
   return originalUrlForServicePath(serviceId, `/${parts.slice(1).join('/')}`, url.search, url.hash)
 }
 
-function reverseUrl(urlString, state) {
+function lookupKnownFrontend(urlString, state) {
   let url
   try { url = new URL(urlString) } catch { return null }
   const farsideOriginal = reverseFarsideUrl(url, state)
-  if (farsideOriginal) return farsideOriginal
+  if (farsideOriginal) {
+    const parts = url.pathname.split('/').filter(Boolean)
+    const serviceId = parts.length ? serviceIdForFarsideSegment(parts[0], state) : null
+    const service = serviceId ? SERVICE_CATALOG[serviceId] : null
+    return {
+      serviceId,
+      serviceName: service?.name ?? null,
+      frontendId: null,
+      frontendName: 'Farside',
+      originalUrl: farsideOriginal
+    }
+  }
   for (const [serviceId, service] of Object.entries(SERVICE_CATALOG)) {
     const config = state.services[serviceId]
     if (!config) continue
     const frontends = Object.entries(serviceFrontends(service, config))
-    for (const [, frontend] of frontends) {
+    for (const [frontendId, frontend] of frontends) {
       const instances = [...(config.favoriteInstances ?? []), ...(config.customInstances ?? []), ...frontend.instances]
       for (const instance of instances) {
         let instanceUrl
         try { instanceUrl = new URL(instance) } catch { continue }
         if (url.hostname !== instanceUrl.hostname) continue
-        return originalUrlForServicePath(serviceId, url.pathname, url.search, url.hash)
+        return {
+          serviceId,
+          serviceName: service.name,
+          frontendId,
+          frontendName: frontend.name,
+          originalUrl: originalUrlForServicePath(serviceId, url.pathname, url.search, url.hash)
+        }
       }
     }
   }
   return null
+}
+
+function reverseUrl(urlString, state) {
+  return lookupKnownFrontend(urlString, state)?.originalUrl ?? null
+}
+
+function redirectHostMatches(currentHref, redirectHref) {
+  try {
+    return new URL(currentHref).hostname === new URL(redirectHref).hostname
+  } catch {
+    return false
+  }
+}
+
+function freedirectWouldSendToFrontend(originalUrlString, currentUrlString, state) {
+  let originalUrl
+  try { originalUrl = new URL(originalUrlString) } catch { return null }
+  if (isBypassedUrl(originalUrl.href, state) || !state.globalEnabled) return null
+  const matchedOriginal = serviceForOriginal(originalUrl)
+  const serviceId = matchedOriginal?.[0]
+  if (!serviceId) return null
+  const service = SERVICE_CATALOG[serviceId]
+  const config = state.services[serviceId]
+  if (!config?.enabled) return null
+  const result = redirectForServiceUrl(serviceId, service, config, originalUrl, state)
+  if (!result?.redirectUrl || !redirectHostMatches(currentUrlString, result.redirectUrl)) return null
+  return result
 }
 
 function farsideFallbackRedirect(urlString, state, { respectGlobal = true } = {}) {
@@ -1763,7 +1929,7 @@ async function updateActionIconForTab(tab) {
   try {
     const state = await getState()
     const diagnosis = tab?.url ? diagnoseUrl(tab.url, state) : null
-    const active = Boolean(state.globalEnabled && (diagnosis?.redirectUrl || diagnosis?.reverseUrl))
+    const active = Boolean(state.globalEnabled && (diagnosis?.redirectUrl || diagnosis?.reason === 'frontend'))
     const details = { path: active ? TOOLBAR_ICONS.active : TOOLBAR_ICONS.inactive }
     if (tab?.id !== undefined) details.tabId = tab.id
     await callApi(actionApi, 'setIcon', details)

@@ -8,6 +8,7 @@ const localStorage = {}
 let dynamicRules = []
 let nativeMessageHandler = async () => ({ ok: true })
 const dynamicRuleFailures = new Map()
+let dnrRemoveChunkSize = 400
 const browser = {
   storage: {
     local: {
@@ -22,6 +23,7 @@ const browser = {
   declarativeNetRequest: {
     async getDynamicRules() { return dynamicRules },
     async updateDynamicRules({ removeRuleIds = [], addRules = [] }) {
+      if (removeRuleIds.length > dnrRemoveChunkSize) throw new Error('Safari remove batch too large')
       for (const rule of addRules) {
         const remainingFailures = dynamicRuleFailures.get(rule.id) ?? 0
         if (remainingFailures > 0) {
@@ -65,6 +67,7 @@ const browser = {
 
 const context = vm.createContext({ browser, chrome: browser, console, URL, Date, RegExp, performance, setTimeout, clearTimeout, AbortController, fetch: async () => ({ ok: true, status: 200, type: 'basic' }) })
 vm.runInContext(readFileSync('Shared (Extension)/Resources/background.js', 'utf8'), context, { filename: 'background.js' })
+dnrRemoveChunkSize = vm.runInContext('DNR_REMOVE_CHUNK_SIZE', context)
 const catalog = vm.runInContext('SERVICE_CATALOG', context)
 const samples = JSON.parse(readFileSync('scripts/service-test-cases.json', 'utf8'))
 
@@ -314,6 +317,66 @@ if (!pullResult.pending || localStorage.freedirectState.farsideFallbackEnabled !
   errors.push('sync pull overwrote a local edit made during the native read')
 }
 vm.runInContext('if (syncPushTimer) { clearTimeout(syncPushTimer); syncPushTimer = null }', context)
+function sendBackground(message) {
+  return new Promise((resolve, reject) => {
+    listeners['runtime.onMessage'](
+      message,
+      {},
+      response => response?.error ? reject(new Error(response.error)) : resolve(response)
+    )
+  })
+}
+
+async function diagnose(url) {
+  return await vm.runInContext(`(async () => diagnoseUrl(${JSON.stringify(url)}, await getState()))()`, context)
+}
+
+console.log('catalog validation: testing disable-all and competing redirects')
+nativeMessageHandler = async () => ({ ok: true })
+localStorage.freedirectState = vm.runInContext('defaultState()', context)
+localStorage.freedirectSyncMeta = { syncEnabled: false, deviceId: 'catalog-validator' }
+vm.runInContext('syncMetaCache = null', context)
+dynamicRules = []
+await vm.runInContext('rebuildRulesNow()', context)
+if (!dynamicRules.length) errors.push('could not seed dynamic rules before disable-all')
+await sendBackground({ type: 'setAllServices', enabled: false })
+if (dynamicRules.length) errors.push(`disable-all left ${dynamicRules.length} Safari DNR rules installed`)
+for (const serviceId of ['twitter', 'reddit']) {
+  const sample = samples[serviceId]
+  const diagnosis = await diagnose(sample)
+  if (diagnosis.redirectUrl) errors.push(`disable-all still redirected ${serviceId}: ${diagnosis.redirectUrl}`)
+}
+
+await vm.runInContext(`(async () => {
+  await withStateWrite(state => {
+    state.globalEnabled = false
+    for (const service of Object.values(state.services)) service.enabled = true
+  })
+  await rebuildRulesNow()
+})()`, context)
+if (dynamicRules.length) errors.push(`global pause left ${dynamicRules.length} Safari DNR rules installed`)
+for (const serviceId of ['twitter', 'reddit']) {
+  const sample = samples[serviceId]
+  const diagnosis = await diagnose(sample)
+  if (diagnosis.redirectUrl) errors.push(`global pause still redirected ${serviceId}: ${diagnosis.redirectUrl}`)
+}
+
+await vm.runInContext(`(async () => {
+  await withStateWrite(state => {
+    state.globalEnabled = true
+    state.services.twitter.enabled = false
+    state.services.reddit.enabled = false
+  })
+})()`, context)
+const twitterFrontend = await diagnose('https://xcancel.com/foo')
+if (twitterFrontend.reason !== 'external-redirect' || !twitterFrontend.reverseUrl) {
+  errors.push(`disabled twitter frontend was ${twitterFrontend.reason} without reverseUrl`)
+}
+const redditFrontend = await diagnose('https://redlib.net/r/privacy/')
+if (redditFrontend.reason !== 'external-redirect' || !redditFrontend.reverseUrl) {
+  errors.push(`disabled reddit frontend was ${redditFrontend.reason} without reverseUrl`)
+}
+
 const bypassIsExact = vm.runInContext(`(() => {
   const regex = new RegExp(bypassRegexForUrl('https://www.youtube.com/watch?v=one'))
   return regex.test('https://www.youtube.com/watch?v=one') && !regex.test('https://www.youtube.com/watch?v=two')

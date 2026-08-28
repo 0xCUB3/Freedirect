@@ -29,6 +29,8 @@
   "popupNoMatch": { "message": "No redirect match" },
   "popupWillRedirect": { "message": "Will redirect" },
   "popupCanOpenOriginal": { "message": "Can open original" },
+  "popupNotFreedirectRedirect": { "message": "Not redirected by Freedirect" },
+  "popupExternalRedirectHint": { "message": "Another extension or userscript may have sent you here." },
   "popupRedirectPage": { "message": "Redirect page" },
   "popupOpenOriginal": { "message": "Open original" },
   "popupBypassUrl": { "message": "Bypass URL" },
@@ -66,6 +68,13 @@
   "testUrlPlaceholder": { "message": "Paste a service or frontend URL" },
   "testUrlLabel": { "message": "URL to debug" },
   "previewRedirect": { "message": "Preview redirect" },
+  "debugExternalRedirect": {
+    "message": "This looks like $FRONTEND$, but Freedirect would not send $SERVICE$ here. Another extension or userscript may be redirecting.",
+    "placeholders": {
+      "frontend": { "content": "$1" },
+      "service": { "content": "$2" }
+    }
+  },
   "previewOriginal": { "message": "Preview original" },
   "keyboardCommands": { "message": "Keyboard commands" },
   "showCommands": { "message": "Show commands" },

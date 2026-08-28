@@ -404,7 +404,15 @@ const api = globalThis.chrome ?? globalThis.browser
     $('commands').innerHTML = result.available ? result.commands.map(command => `<li>${esc(command.description || command.name)} — ${esc(command.shortcut || t('unassigned'))}</li>`).join('') : `<li class="empty-state">${esc(result.reason || t('commandsUnavailable')) || 'Keyboard shortcuts let you redirect or reverse the current page. Add one in Safari Settings → Extensions → Freedirect.'}</li>`
   })
   $('clearBypasses').addEventListener('click', () => msg('clearBypasses').then(refresh))
-  $('debugRedirect').addEventListener('click', async () => { $('debugResult').textContent = (await msg('previewRedirect', { url: $('debugUrl').value.trim() })).url || 'No enabled redirect template matched this URL.' })
+  $('debugRedirect').addEventListener('click', async () => {
+    const diagnosis = (await msg('diagnoseUrl', { url: $('debugUrl').value.trim() })).diagnosis
+    if (diagnosis?.redirectUrl) $('debugResult').textContent = diagnosis.redirectUrl
+    else if (diagnosis?.reason === 'external-redirect') {
+      $('debugResult').textContent = t('debugExternalRedirect', [diagnosis.frontendName || 'an alternative frontend', diagnosis.serviceName || 'this service'])
+    } else {
+      $('debugResult').textContent = 'No enabled redirect template matched this URL.'
+    }
+  })
   $('debugReverse').addEventListener('click', async () => { $('debugResult').textContent = (await msg('previewReverse', { url: $('debugUrl').value.trim() })).url || 'No known frontend instance matched this URL.' })
   $('previewRules').addEventListener('click', async () => {
     const result = await msg('getRules')

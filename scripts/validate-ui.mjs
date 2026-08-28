@@ -71,10 +71,11 @@ function runtimeContext(document, messages, responses = {}) {
 const optionIds = [...readFileSync('Shared (Extension)/Resources/options.html', 'utf8').matchAll(/\bid="([^"]+)"/g)].map(match => match[1])
 const optionsDom = makeDocument(optionIds)
 const optionsMessages = []
-const optionsContext = runtimeContext(optionsDom.document, optionsMessages, {
+const optionsResponses = {
   getState: { error: 'state unavailable in UI smoke test' },
   syncStatus: { available: true, syncEnabled: false }
-})
+}
+const optionsContext = runtimeContext(optionsDom.document, optionsMessages, optionsResponses)
 vm.runInContext(readFileSync('Shared (Extension)/Resources/options.js', 'utf8'), optionsContext, { filename: 'options.js' })
 
 optionsDom.handlers.get('enableAll:click')({ currentTarget: optionsDom.elements.enableAll })
@@ -86,6 +87,20 @@ optionsDom.elements.backup.value = 'null'
 await optionsDom.handlers.get('import:click')()
 assert.equal(optionsMessages.some(message => message.type === 'importState'), false, 'invalid backup must not reach the background')
 assert.equal(optionsMessages.some(message => message.type === 'alert' && message.message.includes('Backup must contain')), true, 'invalid backup must explain the failure')
+
+optionsResponses.diagnoseUrl = {
+  diagnosis: {
+    reason: 'external-redirect',
+    frontendName: 'Redlib',
+    serviceName: 'Reddit',
+    reverseUrl: 'https://www.reddit.com/r/privacy/'
+  }
+}
+optionsDom.elements.debugUrl.value = 'https://redlib.net/r/privacy/'
+await optionsDom.handlers.get('debugRedirect:click')()
+await new Promise(resolve => setTimeout(resolve, 20))
+assert.equal(optionsMessages.some(message => message.type === 'diagnoseUrl' && message.url === 'https://redlib.net/r/privacy/'), true, 'debugger preview must diagnose the pasted URL')
+assert.equal(optionsDom.elements.debugResult.textContent, 'debugExternalRedirect', 'debugger must explain a competing redirector')
 
 const popupIds = [...readFileSync('Shared (Extension)/Resources/popup.html', 'utf8').matchAll(/\bid="([^"]+)"/g)].map(match => match[1])
 const popupDom = makeDocument(popupIds)
@@ -99,5 +114,25 @@ vm.runInContext(readFileSync('Shared (Extension)/Resources/popup.js', 'utf8'), p
 popupDom.elements.enabled.checked = true
 await popupDom.handlers.get('enabled:change')({ target: popupDom.elements.enabled })
 assert.equal(popupMessages.some(message => message.type === 'setGlobalEnabled' && message.enabled === true), true, 'popup toggle must send the requested state')
+
+const popupExternalDom = makeDocument(popupIds)
+const popupExternalMessages = []
+const popupExternalContext = runtimeContext(popupExternalDom.document, popupExternalMessages, {
+  getState: { state: { globalEnabled: true } },
+  diagnoseCurrent: {
+    diagnosis: {
+      reason: 'external-redirect',
+      reverseUrl: 'https://x.com/foo',
+      serviceName: 'X / Twitter'
+    }
+  },
+  farsideCurrent: {}
+})
+vm.runInContext(readFileSync('Shared (Extension)/Resources/popup.js', 'utf8'), popupExternalContext, { filename: 'popup.js' })
+await new Promise(resolve => setTimeout(resolve, 20))
+assert.equal(popupExternalDom.elements.pageMatch.textContent, 'popupNotFreedirectRedirect', 'popup must say Freedirect did not redirect')
+assert.equal(popupExternalDom.elements.status.textContent, 'popupExternalRedirectHint', 'popup must blame another extension or userscript')
+assert.equal(popupExternalDom.elements.pageTarget.textContent, 'x.com/foo', 'popup must still show the original URL')
+assert.equal(popupExternalDom.elements.primaryAction.textContent, 'popupOpenOriginal', 'popup must keep Open original')
 
 console.log('ui behavior ok')

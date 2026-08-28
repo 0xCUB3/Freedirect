@@ -69,6 +69,13 @@ function render(payload, diagnosis, farside) {
     $('pageMatch').textContent = diagnosis.serviceName
     $('pageTarget').textContent = shortUrl(diagnosis.redirectUrl)
     setPrimary('redirect', t('popupRedirectPage'))
+  } else if (diagnosis?.reason === 'external-redirect' && diagnosis?.reverseUrl) {
+    $('pageMatch').textContent = t('popupNotFreedirectRedirect')
+    $('pageTarget').textContent = shortUrl(diagnosis.reverseUrl)
+    setPrimary('reverse', t('popupOpenOriginal'))
+    $('status').textContent = t('popupExternalRedirectHint')
+    $('status').className = 'status'
+    return
   } else if (diagnosis?.reverseUrl) {
     $('pageMatch').textContent = t('popupCanOpenOriginal')
     $('pageTarget').textContent = shortUrl(diagnosis.reverseUrl)
